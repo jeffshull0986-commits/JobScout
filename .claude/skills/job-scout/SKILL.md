@@ -196,6 +196,12 @@ Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` i
 - **If available**: Use both Google web search AND LinkedIn scraper
 - **If not available**: Use Google web search only. Inform user: "Apify isn't connected, so I'm searching Google only. You can connect Apify later for LinkedIn coverage."
 
+**Fallback on mid-run failure**: The Apify/LinkedIn MCP server can disconnect or error out *after* it initially looked available — most commonly surfaced as `API Error: 400 tools` (or any other error) when calling `mcp__Apify__call-actor` or the LinkedIn scraper tool. Treat this the same as "not available":
+- Do not retry the failing call more than once.
+- Drop LinkedIn for the rest of this run and continue with Google web search only — do not let the failure block or fail the whole search.
+- Note it plainly in the final output (Summary Stats section): "LinkedIn search failed this run (`API Error: 400 tools`) — results are Google web search only. Retry later for LinkedIn coverage."
+- If this is a scheduled/automated run (no live user to inform mid-run), still include that note in the output so it's visible in the results the user reads afterward, and downgrade the push notification accordingly — a Google-only run finding nothing new is not the same as "no jobs today," so say which sources actually ran.
+  
 ### Step 3.2: Google Web Search
 
 Run **parallel** WebSearch queries. Build queries from the user's search brief:
@@ -235,6 +241,8 @@ If the user has multiple locations, run one scraper call per location in paralle
 Extract from results: `job_title`, `company_name`, `location`, `time_posted`, `salary_range`, `job_url`, `job_description`.
 
 If `job_post_time: "r86400"` returns too few results, try `"r604800"` (last week) but note the wider window in output.
+
+If the scraper call itself errors (e.g. `API Error: 400 tools`, timeout, or any other failure), apply the **Fallback on mid-run failure** rule from Step 3.1 — one retry max, then proceed Google-only and note it in the output.
 
 ### Step 3.4: Verify Top Candidates
 
