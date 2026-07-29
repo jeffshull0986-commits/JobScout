@@ -191,7 +191,7 @@ Use TodoWrite to show progress:
 
 ### Step 3.1: Check Apify Availability
 
-Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` in available tools.
+Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` (or the specific LinkedIn scraper tool) in available tools.
 
 - **If available**: Use both Google web search AND LinkedIn scraper
 - **If not available**: Use Google web search only. Inform user: "Apify isn't connected, so I'm searching Google only. You can connect Apify later for LinkedIn coverage."
