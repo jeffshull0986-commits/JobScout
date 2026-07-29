@@ -224,19 +224,21 @@ Run all queries in parallel using multiple WebSearch calls in a single message.
 
 ### Step 3.3: LinkedIn via Apify (if available)
 
-For each target location, call the LinkedIn scraper:
+**Never collapse the user's location preferences into a single call.** Treat each distinct location entry in the user's profile as its own required search — one scraper call per location, run in parallel. A "Remote US" or "United States" call is *additive* to a named-city call, never a substitute for it. Before calling the scraper, explicitly list out the location values you're about to search (e.g. for "SF Bay Area (hybrid/in-office) + Remote US" that's TWO calls: `locations: ["San Francisco Bay Area"]` with no workType filter, AND a separate `locations: ["United States"], workType: ["remote"]`) — if you can only account for one of the user's stated locations in your calls, you've dropped one; go back and add it.
+
+The available LinkedIn Actor may vary by session (e.g. `cheap_scraper/linkedin-job-scraper` or `worldunboxer/rapid-linkedin-scraper`) — check its input schema before calling, since field names differ (`keyword`/`locations`/`workType` vs `job_title`/`location`). Example with `cheap_scraper/linkedin-job-scraper`:
 
 ```
 mcp__Apify__call-actor
-  actor: "worldunboxer/rapid-linkedin-scraper"
+  actor: "cheap_scraper/linkedin-job-scraper"
   input:
-    job_title: "[target role title]"
-    location: "[city, country]"
-    jobs_entries: 20
-    job_post_time: "r86400"  # last 24 hours
+    keyword: ["[target role title]", "[role variant]", ...]
+    locations: ["[exact location from user profile]"]
+    workType: ["remote"]  # only include when this call is specifically for the user's remote preference
+    publishedAt: "r86400"  # last 24 hours
 ```
 
-If the user has multiple locations, run one scraper call per location in parallel.
+If the actor only exposes a single `job_title`/`location` string field instead, run one call per (role variant × location) pair as needed.
 
 Extract from results: `job_title`, `company_name`, `location`, `time_posted`, `salary_range`, `job_url`, `job_description`.
 
