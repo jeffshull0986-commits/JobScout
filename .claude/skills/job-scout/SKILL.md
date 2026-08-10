@@ -185,7 +185,7 @@ type: reference
 
 Use TodoWrite to show progress:
 - [ ] Searching Google for [role] jobs
-- [ ] Searching LinkedIn via Apify (if available)
+- [ ] Searching LinkedIn via Apify (if available, else Gmail job-alert fallback)
 - [ ] Fetching job details
 - [ ] Scoring and ranking results
 
@@ -194,13 +194,13 @@ Use TodoWrite to show progress:
 Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` (or the specific LinkedIn scraper tool) in available tools.
 
 - **If available**: Use both Google web search AND LinkedIn scraper
-- **If not available**: Use Google web search only. Inform user: "Apify isn't connected, so I'm searching Google only. You can connect Apify later for LinkedIn coverage."
+- **If not available**: Use Google web search only, and use the **Gmail Fallback** (Step 3.3b) to cover LinkedIn. Inform user: "Apify isn't connected, so I'm searching Google + your Gmail LinkedIn job alerts instead of scraping LinkedIn directly."
 
-**Fallback on mid-run failure**: The Apify/LinkedIn MCP server can disconnect or error out *after* it initially looked available — most commonly surfaced as `API Error: 400 tools` (or any other error) when calling `mcp__Apify__call-actor` or the LinkedIn scraper tool. Treat this the same as "not available":
+**Fallback on mid-run failure**: The Apify/LinkedIn MCP server can disconnect or error out *after* it initially looked available — most commonly surfaced as `API Error: 400 tools`, a billing/usage-limit error (e.g. "you will exceed your remaining usage"), or any other error when calling `mcp__Apify__call-actor` or the LinkedIn scraper tool. Treat this the same as "not available":
 - Do not retry the failing call more than once.
-- Drop LinkedIn for the rest of this run and continue with Google web search only — do not let the failure block or fail the whole search.
-- Note it plainly in the final output (Summary Stats section): "LinkedIn search failed this run (`API Error: 400 tools`) — results are Google web search only. Retry later for LinkedIn coverage."
-- If this is a scheduled/automated run (no live user to inform mid-run), still include that note in the output so it's visible in the results the user reads afterward, and downgrade the push notification accordingly — a Google-only run finding nothing new is not the same as "no jobs today," so say which sources actually ran.
+- Drop the LinkedIn scraper for the rest of this run and fall back to Google web search **plus the Gmail Fallback (Step 3.3b)** — do not let the failure block or fail the whole search.
+- Note it plainly in the final output (Summary Stats section): "LinkedIn scraper failed this run (`<error>`) — results are Google web search + Gmail LinkedIn alerts, not a direct LinkedIn scrape. Retry later for full LinkedIn coverage."
+- If this is a scheduled/automated run (no live user to inform mid-run), still include that note in the output so it's visible in the results the user reads afterward, and downgrade the push notification accordingly — a run without a direct LinkedIn scrape finding nothing new is not the same as "no jobs today," so say which sources actually ran.
   
 ### Step 3.2: Google Web Search
 
@@ -244,7 +244,30 @@ Extract from results: `job_title`, `company_name`, `location`, `time_posted`, `s
 
 If `job_post_time: "r86400"` returns too few results, try `"r604800"` (last week) but note the wider window in output.
 
-If the scraper call itself errors (e.g. `API Error: 400 tools`, timeout, or any other failure), apply the **Fallback on mid-run failure** rule from Step 3.1 — one retry max, then proceed Google-only and note it in the output.
+If the scraper call itself errors (e.g. `API Error: 400 tools`, a billing/usage-limit error, timeout, or any other failure), apply the **Fallback on mid-run failure** rule from Step 3.1 — one retry max, then proceed to Step 3.3b (Gmail Fallback) plus Google, and note it in the output.
+
+### Step 3.3b: Gmail Fallback (only when Apify is unavailable or failed)
+
+**Do not run this step if the LinkedIn Apify scraper succeeded.** It exists purely to recover LinkedIn coverage when Step 3.1/3.3 couldn't reach Apify — check `mcp__Gmail__*` tools are available first, and if Gmail isn't connected either, just note in the output that LinkedIn coverage was skipped entirely this run.
+
+LinkedIn regularly emails job recommendation digests ("Job alerts for you", "Jobs you may be interested in", "X new jobs match your preferences"). When Apify is down, mine the user's inbox for whatever LinkedIn already surfaced them in the last 24 hours:
+
+1. **Search** with `mcp__Gmail__search_threads`:
+   ```
+   query: "from:(linkedin.com) newer_than:1d {subject:(job alert) OR subject:(jobs for you) OR subject:(jobs you may be interested in) OR subject:(new jobs) OR subject:(job recommendations) OR subject:(recommended for you)}"
+   view: THREAD_VIEW_MINIMAL
+   ```
+   Widen to `newer_than:2d` only if zero threads come back, and note the widened window in the output (same convention as Step 3.3's `r604800` fallback).
+
+2. **Fetch each matching thread** with `mcp__Gmail__get_thread` using `messageFormat: PLAIN_TEXT` to get the full digest body without pulling in HTML noise.
+
+3. **Extract individual job listings** from the digest text — these emails typically list several jobs per message, each with a title, company, location, and a `linkedin.com/jobs/view/...` or tracking link. Pull out every distinct listing, not just the first one. Skip anything that isn't a real job listing (survey prompts, "update your preferences" footers, unrelated LinkedIn notifications).
+
+4. **Verify freshness and details**: LinkedIn digest emails can bundle listings that were posted before the last 24 hours even though the *email* arrived within 24 hours — the email's arrival time is not proof of the job's posting time. For each extracted listing, `WebFetch` the job URL (same as Step 3.4) to confirm it's still open and, where possible, its actual posted date. If the posted date can't be verified, mark it "~est." per the **Important Notes** convention rather than assuming it's fresh.
+
+5. **Tag the source** as `Gmail` in the results table's Source column (distinct from `Google` and `LinkedIn`) so the user knows this came from their own alert digest, not a live scrape.
+
+Feed these into Step 3.5 (Deduplicate) and Phase 4 (Scoring) exactly like any other source.
 
 ### Step 3.4: Verify Top Candidates
 
@@ -309,7 +332,10 @@ Present results as a markdown table, sorted by: 1) most recently posted, 2) high
 |---|------|---------|--------|----------|--------|-----|-------|
 | 1 | Founding Designer | telli (YC F24) | Today | Berlin | LinkedIn | 9/10 | [Apply](url) |
 | 2 | Senior PD, AI | Zeta Global | Apr 8 | Remote US | Google | 8/10 | [Apply](url) |
+| 3 | Growth Designer | Acme Co | Today | SF Bay Area | Gmail | 7/10 | [Apply](url) |
 ```
+
+`Source` values: `Google`, `LinkedIn` (direct Apify scrape), or `Gmail` (pulled from a LinkedIn job-alert email, only used when Apify was unavailable — see Step 3.3b).
 
 **Limit to top 10 results.**
 
