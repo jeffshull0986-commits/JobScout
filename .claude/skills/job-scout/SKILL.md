@@ -250,14 +250,14 @@ If the scraper call itself errors (e.g. `API Error: 400 tools`, a billing/usage-
 
 **Do not run this step if the LinkedIn Apify scraper succeeded.** It exists purely to recover LinkedIn coverage when Step 3.1/3.3 couldn't reach Apify — check `mcp__Gmail__*` tools are available first, and if Gmail isn't connected either, just note in the output that LinkedIn coverage was skipped entirely this run.
 
-LinkedIn regularly emails job recommendation digests ("Job alerts for you", "Jobs you may be interested in", "X new jobs match your preferences"). When Apify is down, mine the user's inbox for whatever LinkedIn already surfaced them in the last 24 hours:
+LinkedIn regularly emails job recommendation digests. **Do not filter by subject line** — LinkedIn's actual subject formats vary and don't reliably contain words like "job alert" or "jobs for you" (observed real subjects include `"<Job Title> at <Company>"`, `"'<keyword>': <Company> - <Title> posted on <date>"`, and `"<Company> is hiring for a Remote role"` — a subject-text filter will silently return zero results and look like "no digests exist" when they actually do). Filter by **sender** instead, which is stable:
 
 1. **Search** with `mcp__Gmail__search_threads`:
    ```
-   query: "from:(linkedin.com) newer_than:1d {subject:(job alert) OR subject:(jobs for you) OR subject:(jobs you may be interested in) OR subject:(new jobs) OR subject:(job recommendations) OR subject:(recommended for you)}"
+   query: "newer_than:1d {from:(jobalerts-noreply@linkedin.com) OR from:(jobs-noreply@linkedin.com)}"
    view: THREAD_VIEW_MINIMAL
    ```
-   Widen to `newer_than:2d` only if zero threads come back, and note the widened window in the output (same convention as Step 3.3's `r604800` fallback).
+   Widen to `newer_than:2d` only if zero threads come back, and note the widened window in the output (same convention as Step 3.3's `r604800` fallback). These two senders are LinkedIn's job-alert and job-recommendation addresses specifically — other LinkedIn senders (`messaging-digest-noreply@`, `messages-noreply@`, `invitations@`, `notifications-noreply@`, `editors-noreply@`) are connection/messaging/newsletter noise, not job listings, and should not be searched here.
 
 2. **Fetch each matching thread** with `mcp__Gmail__get_thread` using `messageFormat: PLAIN_TEXT` to get the full digest body without pulling in HTML noise.
 
