@@ -12,6 +12,8 @@ Location: San Francisco Bay Area or fully remote
 
 Salary floor: $125,000
 
+Freshness window: Accept jobs LinkedIn labels "1 day ago" in addition to same-day/"today" postings (i.e. up to ~48 hours old, not just a strict 24-hour cutoff). Still discard anything "2 days ago" or older.
+
 Hard disqualifiers: Not looking for anything fully in office 5 days a week. Not looking to relocate.
 
 Previously applied to Jobs: 
