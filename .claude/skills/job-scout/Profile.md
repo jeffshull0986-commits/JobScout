@@ -16,6 +16,8 @@ Freshness window: Accept jobs LinkedIn labels "1 day ago" in addition to same-da
 
 Hard disqualifiers: Not looking for anything fully in office 5 days a week. Not looking to relocate.
 
+Additional Gmail sources to check every run: In addition to the LinkedIn job-alert senders (jobalerts-noreply@linkedin.com, jobs-noreply@linkedin.com), also search Gmail for emails from noreply@htmr.kr (Hitmarker — gaming/esports job alert digests). Extract every individual job listing from these emails the same way as LinkedIn digests, verify freshness/details via WebFetch on the listing URL, and tag the source as `Hitmarker` in the results table.
+
 Previously applied to Jobs: 
 
 * [Product Marketing Manager, XBOX Media Solutions](https://www.linkedin.com/jobs/view/4443359968/?lipi=urn%3Ali%3Apage%3Ad_flagship3_opportunity_tracker%3BXLwWzbWcTLu9qQExd4Ny0w%3D%3D), Microsoft  
