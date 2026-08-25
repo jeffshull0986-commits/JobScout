@@ -185,7 +185,7 @@ type: reference
 
 Use TodoWrite to show progress:
 - [ ] Searching Google for [role] jobs
-- [ ] Searching LinkedIn via Apify (if available, else Gmail job-alert fallback)
+- [ ] Searching LinkedIn via Apify (if available, else Gmail + Perplexity fallback)
 - [ ] Fetching job details
 - [ ] Scoring and ranking results
 
@@ -194,12 +194,12 @@ Use TodoWrite to show progress:
 Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` (or the specific LinkedIn scraper tool) in available tools.
 
 - **If available**: Use both Google web search AND LinkedIn scraper
-- **If not available**: Use Google web search only, and use the **Gmail Fallback** (Step 3.3b) to cover LinkedIn. Inform user: "Apify isn't connected, so I'm searching Google + your Gmail LinkedIn job alerts instead of scraping LinkedIn directly."
+- **If not available**: Use Google web search only, and run the **Gmail Fallback** (Step 3.3b) and the **Perplexity Fallback** (Step 3.3c) together to cover LinkedIn, Indeed, and Hitmarker. Inform user: "Apify isn't connected, so I'm searching Google + Perplexity + your Gmail LinkedIn job alerts instead of scraping LinkedIn directly."
 
 **Fallback on mid-run failure**: The Apify/LinkedIn MCP server can disconnect or error out *after* it initially looked available — most commonly surfaced as `API Error: 400 tools`, a billing/usage-limit error (e.g. "you will exceed your remaining usage"), or any other error when calling `mcp__Apify__call-actor` or the LinkedIn scraper tool. Treat this the same as "not available":
 - Do not retry the failing call more than once.
-- Drop the LinkedIn scraper for the rest of this run and fall back to Google web search **plus the Gmail Fallback (Step 3.3b)** — do not let the failure block or fail the whole search.
-- Note it plainly in the final output (Summary Stats section): "LinkedIn scraper failed this run (`<error>`) — results are Google web search + Gmail LinkedIn alerts, not a direct LinkedIn scrape. Retry later for full LinkedIn coverage."
+- Drop the LinkedIn scraper for the rest of this run and fall back to Google web search **plus the Gmail Fallback (Step 3.3b) and the Perplexity Fallback (Step 3.3c)** — do not let the failure block or fail the whole search.
+- Note it plainly in the final output (Summary Stats section): "LinkedIn scraper failed this run (`<error>`) — results are Google web search + Perplexity + Gmail LinkedIn alerts, not a direct LinkedIn scrape. Retry later for full LinkedIn coverage."
 - If this is a scheduled/automated run (no live user to inform mid-run), still include that note in the output so it's visible in the results the user reads afterward, and downgrade the push notification accordingly — a run without a direct LinkedIn scrape finding nothing new is not the same as "no jobs today," so say which sources actually ran.
   
 ### Step 3.2: Google Web Search
@@ -244,7 +244,7 @@ Extract from results: `job_title`, `company_name`, `location`, `time_posted`, `s
 
 If `job_post_time: "r86400"` returns too few results, try `"r604800"` (last week) but note the wider window in output.
 
-If the scraper call itself errors (e.g. `API Error: 400 tools`, a billing/usage-limit error, timeout, or any other failure), apply the **Fallback on mid-run failure** rule from Step 3.1 — one retry max, then proceed to Step 3.3b (Gmail Fallback) plus Google, and note it in the output.
+If the scraper call itself errors (e.g. `API Error: 400 tools`, a billing/usage-limit error, timeout, or any other failure), apply the **Fallback on mid-run failure** rule from Step 3.1 — one retry max, then proceed to Step 3.3b (Gmail Fallback) and Step 3.3c (Perplexity Fallback) plus Google, and note it in the output.
 
 ### Step 3.3b: Gmail Fallback (only when Apify is unavailable or failed)
 
@@ -268,6 +268,28 @@ LinkedIn regularly emails job recommendation digests. **Do not filter by subject
 5. **Tag the source** as `Gmail` in the results table's Source column (distinct from `Google` and `LinkedIn`) so the user knows this came from their own alert digest, not a live scrape.
 
 Feed these into Step 3.5 (Deduplicate) and Phase 4 (Scoring) exactly like any other source.
+
+### Step 3.3c: Perplexity Fallback (runs alongside Gmail Fallback, only when Apify is unavailable or failed)
+
+Runs under the same trigger as Step 3.3b — whenever Apify wasn't available at the start of the run (Step 3.1) or failed mid-run (Step 3.3's failure rule) — and runs **in addition to** Gmail, not instead of it. Gmail only recovers what's already sitting in the user's inbox; Perplexity can run fresh queries, so use it to cover ground Gmail digests won't: LinkedIn, Indeed, and Hitmarker listings that never generated an alert email.
+
+Check for any `mcp__perplexity__*` tool via ToolSearch — the exact tool name may vary by session/deployment, so don't assume a fixed name, check what's actually available. If no Perplexity tool is connected, skip this step entirely and note in the output that Perplexity coverage was skipped this run (distinct from the Apify failure note — this is a separate source).
+
+1. **Query construction**: Build one query per (role variant × location) pair from the user's search brief — same matrix Step 3.2 uses for Google. Explicitly ask Perplexity to search and cite LinkedIn, Indeed, and Hitmarker, e.g.:
+   ```
+   Find [target role title] jobs posted in the last 24-48 hours on LinkedIn, Indeed, or Hitmarker, located in [location] or remote. Include the company name, exact posting date, salary if listed, and a direct link to each listing.
+   ```
+   Run all (role × location) calls in parallel. Same discipline as Step 3.3's location rule: don't collapse the user's distinct location preferences into one call — a remote-focused call is additive to a named-city call, never a substitute for it.
+
+2. **Extract listings** from Perplexity's answer text — title, company, location, stated posting date/recency, salary if given, and source URL. The response is prose with citations, not structured JSON, so parse it manually; discard anything without a usable apply/source link.
+
+3. **Retry policy**: same as Apify — do not retry a failing Perplexity call more than once. If it errors (auth, rate limit, timeout, or otherwise), drop it for the rest of the run and note that in the Summary Stats output, same convention as the Step 3.1 Apify failure note.
+
+4. **Verify freshness and details**: Perplexity's stated recency is not authoritative, same rule as Gmail digests in Step 3.3b. `WebFetch` every extracted listing's source URL (same as Step 3.4) to confirm it's still open and pin down the actual posted date before it counts toward the freshness window. If the posted date still can't be verified after WebFetch, mark it "~est." per the **Important Notes** convention rather than assuming it's fresh.
+
+5. **Tag the source** as `Google` in the results table's Source column — Perplexity results fold into the same `Google` bucket as WebSearch results rather than getting a distinct tag, since both are general web search under the hood.
+
+Feed these into Step 3.5 (Deduplicate) and Phase 4 (Scoring) exactly like any other source. Because Step 3.3b (Gmail) and this step run under the same trigger, expect overlap between them — Step 3.5's dedupe-by-company+role-title handles that.
 
 ### Step 3.4: Verify Top Candidates
 
@@ -335,7 +357,7 @@ Present results as a markdown table, sorted by: 1) most recently posted, 2) high
 | 3 | Growth Designer | Acme Co | Today | SF Bay Area | Gmail | 7/10 | [Apply](url) |
 ```
 
-`Source` values: `Google`, `LinkedIn` (direct Apify scrape), or `Gmail` (pulled from a LinkedIn job-alert email, only used when Apify was unavailable — see Step 3.3b).
+`Source` values: `Google` (includes Perplexity Fallback results — see Step 3.3c), `LinkedIn` (direct Apify scrape), or `Gmail` (pulled from a LinkedIn job-alert email, only used when Apify was unavailable — see Step 3.3b).
 
 **Limit to top 10 results.**
 
