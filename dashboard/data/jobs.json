@@ -20,7 +20,8 @@
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": []
+      "gmail_evidence": [],
+      "networking_contacts": ""
     },
     {
       "id": 2,
@@ -41,7 +42,8 @@
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": []
+      "gmail_evidence": [],
+      "networking_contacts": ""
     },
     {
       "id": 3,
@@ -62,7 +64,8 @@
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": []
+      "gmail_evidence": [],
+      "networking_contacts": ""
     },
     {
       "id": 4,
@@ -83,7 +86,8 @@
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": []
+      "gmail_evidence": [],
+      "networking_contacts": ""
     },
     {
       "id": 5,
@@ -104,7 +108,8 @@
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": []
+      "gmail_evidence": [],
+      "networking_contacts": ""
     }
   ]
 }

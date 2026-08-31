@@ -460,19 +460,43 @@ Widen `newer_than:2d` to `newer_than:4d` only if a check returns zero results ac
 
 Skip if `dashboard/data/jobs.json` doesn't exist.
 
-For every card now sitting in `applied` stage — whether just moved there by Phase 5.6a, or already applied from a previous run but never researched (`python3 dashboard/server.py list-jobs --stage applied`) — do a light research pass:
+For every card now sitting in `applied` stage — whether just moved there by Phase 5.6a, or already applied from a previous run but never researched (`python3 dashboard/server.py list-jobs --stage applied`) — do both a company research pass (5.7a) and a LinkedIn networking pass (5.7b), then save and advance the card.
+
+### 5.7a: Company / Market Research
 
 1. `WebSearch` the company name + "marketing strategy", and the company name + recent news (last ~3 months).
 2. `WebFetch` the company's own site (homepage/about/newsroom) if search doesn't surface enough.
 3. Write 3-5 sentences: what the company does, any recent marketing campaigns or positioning shifts found, company stage/size, anything notable for interview prep.
 
-Save it and advance the card in one step:
+If this turns up nothing usable, still write a short note saying so ("no public marketing activity found") rather than leaving the field blank.
+
+### 5.7b: LinkedIn Networking Contacts
+
+Identify people at the company worth connecting with on LinkedIn — specifically, whoever this role would plausibly report up to, not peers or unrelated departments.
+
+1. **Pick target titles from the job's own seniority** (the `title` field on the card):
+   - IC / Manager / Senior Manager level (e.g. "Senior Manager, Paid Search") → search for **Director** and **C-level** marketing titles (Director of Marketing, VP Marketing, CMO, Chief Marketing Officer)
+   - Director level → search for **VP** and **C-level** titles only
+   - VP level → search for **C-level** titles only (CMO, Chief Marketing Officer)
+   - Already C-level/Head of Marketing → search for CMO/Chief Marketing Officer anyway as a sanity check (may surface the person's own boss or a co-founder)
+2. `WebSearch` with a query like:
+   ```
+   site:linkedin.com/in "[Company]" ("VP Marketing" OR "Vice President Marketing" OR "Director of Marketing" OR "CMO" OR "Chief Marketing Officer")
+   ```
+   adjusting the title list per step 1.
+3. From the results, extract up to 3-5 distinct people: name, title, and their `linkedin.com/in/...` profile URL. Don't `WebFetch` the profile pages themselves — they're login-walled and will fail; the search result snippet/link is enough to identify a candidate to connect with.
+4. If nothing turns up, write a short note saying so ("no Director+ marketing profiles found via search") rather than leaving the field blank — same convention as 5.7a.
+
+### Save and advance
+
+Both pieces get written before the card moves to `research_completed`:
 
 ```
 echo "<research summary>" | python3 dashboard/server.py set-research <id> --stage research_completed
+echo "<name — title — linkedin.com/in/url, one per line>" | python3 dashboard/server.py set-contacts <id>
 ```
 
-If research turns up nothing usable, still move the card forward with a short note saying so ("no public marketing activity found") rather than leaving it stuck in `applied`. A failure researching one company must not block research on the others.
+Run `set-research` first (it carries the stage change) then `set-contacts` — order matters since only `set-research` advances the stage. A failure in either piece, or researching one company, must not block the rest — move on and note the gap rather than leaving the card stuck in `applied`.
 
 ## Phase 5.8: Commit & Push Board Changes
 

@@ -25,6 +25,11 @@ Pass a different port if 8420 is taken: `python3 server.py 8888`.
 - The board has 7 columns: Review, Applied, Research Completed, Screening,
   Interview, Passed, Skipped. Drag a card between columns to change its
   stage, or click a card to open/edit the full details.
+- When a card hits Applied, the routine researches the company (marketing
+  strategy, recent news) and searches LinkedIn for Director/C-level
+  marketing people it would likely report to — both land in the card's
+  Research Notes and Networking Contacts fields before it moves to
+  Research Completed.
 - Moving a card into a stage for the first time stamps a `date_*` field
   (e.g. `date_applied`) automatically, so the history persists even if you
   drag it elsewhere later.
@@ -62,5 +67,6 @@ python3 server.py list-jobs [--stage STAGE]
 echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
 python3 server.py advance-stage <id> <stage> [--evidence "text"]
 echo "research text" | python3 server.py set-research <id> [--stage research_completed]
+echo "contacts text" | python3 server.py set-contacts <id>
 python3 server.py sync
 ```

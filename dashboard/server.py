@@ -15,6 +15,7 @@ server running - reads/writes dashboard/data/jobs.json directly):
     echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
     python3 server.py advance-stage <id> <stage> [--evidence "text"]
     echo "research text" | python3 server.py set-research <id> [--stage research_completed]
+    echo "contacts text" | python3 server.py set-contacts <id>
     python3 server.py sync   # pull, then commit+push jobs.json if changed
 """
 import json
@@ -93,6 +94,7 @@ def create_job(data, payload):
         "date_passed": None,
         "notes": payload.get("notes", ""),
         "research_notes": payload.get("research_notes", ""),
+        "networking_contacts": payload.get("networking_contacts", ""),
         "gmail_evidence": payload.get("gmail_evidence", []),
     }
     data["jobs"].append(job)
@@ -117,6 +119,7 @@ def apply_job_update(job, payload):
     for field in (
         "title", "company", "location", "fit_score", "score_reasoning",
         "source", "job_url", "salary_range", "notes", "research_notes",
+        "networking_contacts",
     ):
         if field in payload:
             job[field] = payload[field]
@@ -407,6 +410,24 @@ def cmd_set_research(args):
     print(json.dumps(job, indent=2))
 
 
+def cmd_set_contacts(args):
+    if not args:
+        print("usage: server.py set-contacts <id> < contacts.txt", file=sys.stderr)
+        sys.exit(1)
+    job_id = int(args[0])
+    contacts_text = sys.stdin.read()
+
+    data = load_data()
+    job = next((j for j in data["jobs"] if j["id"] == job_id), None)
+    if job is None:
+        print(f"error: no job with id {job_id}", file=sys.stderr)
+        sys.exit(1)
+
+    apply_job_update(job, {"networking_contacts": contacts_text})
+    save_data(data)
+    print(json.dumps(job, indent=2))
+
+
 def cmd_sync():
     result = sync_with_remote()
     print(json.dumps(result, indent=2))
@@ -418,6 +439,7 @@ CLI_COMMANDS = {
     "advance-stage": cmd_advance_stage,
     "list-jobs": cmd_list_jobs,
     "set-research": cmd_set_research,
+    "set-contacts": cmd_set_contacts,
     "sync": lambda args: cmd_sync(),
 }
 
