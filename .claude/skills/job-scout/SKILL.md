@@ -189,6 +189,18 @@ Use TodoWrite to show progress:
 - [ ] Fetching job details
 - [ ] Scoring and ranking results
 
+### Step 3.0: Sync Board State (if a dashboard exists)
+
+If `dashboard/data/jobs.json` exists in this repo, pull the latest board state before doing anything else, so this run sees any manual edits the user pushed from the local dashboard (e.g. via its Sync button) instead of working from a stale copy:
+
+```
+python3 dashboard/server.py sync
+```
+
+This is primarily a pull — it only pushes if this checkout already has uncommitted local changes to `jobs.json` sitting in it, which is not the normal case at the very start of a run. If it fails (e.g. `python3` not found, or a merge conflict), do not block the rest of the run on it — proceed with whatever local copy of `jobs.json` is present and note the failure in the Summary Stats output at the end.
+
+If `dashboard/data/jobs.json` does not exist at all, this is a plain job-scout setup without the dashboard — skip this step and all of Phase 5.5–5.8 later in the run.
+
 ### Step 3.1: Check Apify Availability
 
 Check if Apify MCP tools are available by looking for `mcp__Apify__call-actor` (or the specific LinkedIn scraper tool) in available tools.
@@ -371,6 +383,8 @@ After the table, include a brief justification for each role:
 
 > Found X jobs across Y sources. Z passed your minimum score of [threshold]/10.
 
+If `dashboard/data/jobs.json` exists, append a line summarizing the board pass: how many new cards were added, how many existing cards were auto-advanced by the Gmail scan (and to which stages), how many got a research pass, and whether the final push succeeded — plus any failure notes from Steps 3.0/5.6/5.8.
+
 ### Follow-up
 
 End with:
@@ -383,6 +397,92 @@ End with:
 > I've saved your profile so next time you can just say "job scout" to run a fresh search.
 
 If the user picks a role number or says they want to tailor their CV, proceed to **Phase 6**.
+
+## Phase 5.5: Write Results to the Board
+
+Skip this phase entirely if `dashboard/data/jobs.json` doesn't exist (see Step 3.0). This step must never be skipped or blocked by anything in Phase 5.6–5.8 below — writing today's new jobs to the board is as core to the run as the chat table itself.
+
+For every job that passed the score threshold in this run's Results Table, add it to the board as a new `review`-stage card — but first check it isn't already there. Get the current board:
+
+```
+python3 dashboard/server.py list-jobs
+```
+
+Dedupe against existing cards by company + role title (case-insensitive), same rule as Step 3.5's source dedupe. For anything not already present:
+
+```
+echo '{"title": "...", "company": "...", "location": "...", "fit_score": 8, "score_reasoning": "...", "source": "LinkedIn", "job_url": "...", "salary_range": "..."}' | python3 dashboard/server.py add-job
+```
+
+Map fields straight from the Results Table / Score Justifications already built this run: `score_reasoning` is the one-line justification text, `source` is the same Google/LinkedIn/Gmail value used in the table.
+
+## Phase 5.6: Gmail Stage Auto-Advance
+
+Skip this phase if `dashboard/data/jobs.json` doesn't exist, or if `mcp__Gmail__*` tools aren't available this run. Run it after Phase 5.5 completes, and **never let it block, delay, or roll back Phase 5.5's board write** — if a search or match here fails, skip that piece and continue; don't retry more than once per search.
+
+The user has explicitly authorized auto-advancing board cards from Gmail evidence with no per-move confirmation — mistakes are expected and get corrected by hand in the board UI, so err toward matching rather than being overly conservative. Every auto-advance must still record its evidence (thread subject + sender + date) via `--evidence`, so the user can see why a card moved and undo it if wrong.
+
+Pull the current board (`python3 dashboard/server.py list-jobs`) and work through these three checks. Each is scoped to the stage that precedes the transition — a card is only a candidate for a move if it's currently sitting in the right starting stage.
+
+**5.6a — Applied (from `review`):** for cards in `review`, search for application-confirmation emails:
+```
+mcp__Gmail__search_threads
+  query: "newer_than:2d {subject:application OR subject:applying OR \"we've received your application\" OR \"thank you for applying\"} -from:linkedin.com -from:indeed.com"
+```
+Match returned threads' sender/subject/snippet against each `review`-stage card's `company` field (case-insensitive substring match). For each match:
+```
+python3 dashboard/server.py advance-stage <id> applied --evidence "Gmail: <subject> from <sender>, <date>"
+```
+
+**5.6b — Screening (from `applied`):** for cards in `applied`, search for the company's *first* reply proposing to schedule a call — treat any such response as Screening regardless of which round it technically is (the user handles later-round Interview moves manually, no automation needed there):
+```
+mcp__Gmail__search_threads
+  query: "newer_than:2d {subject:interview OR subject:\"next steps\" OR \"schedule a call\" OR \"schedule some time\" OR calendly OR \"available for a\"} -from:linkedin.com"
+```
+Match against `applied`-stage cards by company name the same way. For each match:
+```
+python3 dashboard/server.py advance-stage <id> screening --evidence "Gmail: <subject> from <sender>, <date>"
+```
+
+**5.6c — Passed (rejection, from any non-terminal stage):** for cards in `review`, `applied`, `research_completed`, `screening`, or `interview`, search for rejection language:
+```
+mcp__Gmail__search_threads
+  query: "newer_than:2d {\"unfortunately\" OR \"not moving forward\" OR \"decided not to\" OR \"other candidates\" OR \"pursue other\" OR subject:\"update on your application\"} -from:linkedin.com"
+```
+Match against those cards by company name. For each match:
+```
+python3 dashboard/server.py advance-stage <id> passed --evidence "Gmail: <subject> from <sender>, <date>"
+```
+
+Widen `newer_than:2d` to `newer_than:4d` only if a check returns zero results across all three searches, and note the widened window in the Summary Stats output — same convention as the `r604800` / `newer_than:2d` fallback widenings elsewhere in this skill.
+
+## Phase 5.7: Company Research on Newly-Applied Jobs
+
+Skip if `dashboard/data/jobs.json` doesn't exist.
+
+For every card now sitting in `applied` stage — whether just moved there by Phase 5.6a, or already applied from a previous run but never researched (`python3 dashboard/server.py list-jobs --stage applied`) — do a light research pass:
+
+1. `WebSearch` the company name + "marketing strategy", and the company name + recent news (last ~3 months).
+2. `WebFetch` the company's own site (homepage/about/newsroom) if search doesn't surface enough.
+3. Write 3-5 sentences: what the company does, any recent marketing campaigns or positioning shifts found, company stage/size, anything notable for interview prep.
+
+Save it and advance the card in one step:
+
+```
+echo "<research summary>" | python3 dashboard/server.py set-research <id> --stage research_completed
+```
+
+If research turns up nothing usable, still move the card forward with a short note saying so ("no public marketing activity found") rather than leaving it stuck in `applied`. A failure researching one company must not block research on the others.
+
+## Phase 5.8: Commit & Push Board Changes
+
+Skip if `dashboard/data/jobs.json` doesn't exist. Always run this last, whether or not Phase 5.6/5.7 found anything — Phase 5.5's new cards still need to go live even if nothing else changed:
+
+```
+python3 dashboard/server.py sync
+```
+
+This pulls first (picking up anything the user pushed from the local UI since Step 3.0), then commits and pushes any `jobs.json` changes straight to the branch this checkout is on — **no confirmation needed**, this has been explicitly authorized by the user. Don't retry more than once if it fails (re-running `sync` is safe/idempotent); if it still fails, note it plainly in the Summary Stats output ("Board changes could not be pushed automatically this run — click Sync in the dashboard to push manually") rather than silently dropping the update.
 
 ## Phase 6: CV Tailoring
 
@@ -520,3 +620,5 @@ Use AskUserQuestion. Generate requested formats.
 - Never fabricate job listings or apply links
 - If a job's posting date cannot be verified, note "~[estimated date]" in the Posted column
 - Keep the conversational flow moving — don't get stuck if one search fails; proceed with what you have
+- Board integration (Steps 3.0, 5.5-5.8) is entirely conditional on `dashboard/data/jobs.json` existing in the repo — if it's not there, this is a plain job-scout setup and none of those steps apply
+- Gmail-driven board stage moves (5.6) are best-effort fuzzy matching (company-name substring), expected to occasionally mismatch — the user corrects those by hand in the board UI rather than requiring review before they happen
