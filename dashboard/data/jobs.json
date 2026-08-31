@@ -18,7 +18,7 @@
       "date_screening": null,
       "date_interview": null,
       "date_passed": null,
-      "notes": "",
+      "notes": "sync test - verifying /api/sync",
       "research_notes": "",
       "gmail_evidence": []
     },
