@@ -191,4 +191,29 @@ async function updateJob(id, payload) {
   });
 }
 
+const syncBtn = document.getElementById("sync-btn");
+const syncStatus = document.getElementById("sync-status");
+
+syncBtn.addEventListener("click", async () => {
+  syncBtn.disabled = true;
+  syncBtn.textContent = "⟳ Syncing...";
+  syncStatus.textContent = "";
+  syncStatus.className = "sync-status";
+  try {
+    const res = await fetch("/api/sync", { method: "POST" });
+    const result = await res.json();
+    syncStatus.textContent = result.message;
+    syncStatus.className = "sync-status " + (result.ok ? "sync-ok" : "sync-error");
+    if (result.ok) {
+      await fetchJobs();
+    }
+  } catch (err) {
+    syncStatus.textContent = "Sync request failed - is the server still running?";
+    syncStatus.className = "sync-status sync-error";
+  } finally {
+    syncBtn.disabled = false;
+    syncBtn.textContent = "⟳ Sync";
+  }
+});
+
 fetchJobs();

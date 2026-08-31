@@ -11,6 +11,7 @@ Run:
 Then open http://localhost:8420 (or whatever port you passed).
 """
 import json
+import subprocess
 import sys
 import threading
 from datetime import date
@@ -19,7 +20,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parent
 DATA_FILE = ROOT / "data" / "jobs.json"
+DATA_FILE_REL = "dashboard/data/jobs.json"
 STATIC_DIR = ROOT / "static"
 
 STAGES = [
@@ -55,6 +58,87 @@ def load_data():
 def save_data(data):
     with _lock:
         DATA_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _run_git(*args):
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 1, "", "git command timed out after 30s"
+    except FileNotFoundError:
+        return 1, "", "git executable not found on PATH"
+
+
+def sync_with_remote():
+    """Pull latest board state, then commit+push any local changes.
+
+    Operates on whatever branch is currently checked out (via its
+    configured upstream), rather than a hardcoded branch name - this repo
+    may be on a feature branch during development and on `main` once this
+    is merged, and the sync logic should work correctly in both cases.
+
+    Returns a dict describing what happened - never raises. A pull conflict
+    or push failure is reported back rather than auto-resolved, since
+    silently picking a side on a conflicted jobs.json could throw away
+    either the user's local edits or what the cloud routine wrote.
+    """
+    log = []
+
+    code, out, err = _run_git("rev-parse", "--abbrev-ref", "HEAD")
+    if code != 0 or not out or out == "HEAD":
+        return {
+            "ok": False,
+            "step": "branch",
+            "message": "Could not determine current branch (detached HEAD?). "
+                       "Check out a real branch (e.g. main) before syncing.",
+            "log": [f"$ git rev-parse --abbrev-ref HEAD\n{out}\n{err}".strip()],
+        }
+    branch = out
+
+    code, out, err = _run_git("pull", "--no-rebase", "origin", branch)
+    log.append(f"$ git pull --no-rebase origin {branch}\n{out}\n{err}".strip())
+    if code != 0:
+        return {
+            "ok": False,
+            "step": "pull",
+            "message": "Pull failed - most likely a merge conflict on jobs.json. "
+                       "Resolve it manually in a terminal before syncing again.",
+            "log": log,
+        }
+
+    code, out, err = _run_git("status", "--porcelain", "--", DATA_FILE_REL)
+    log.append(f"$ git status --porcelain -- {DATA_FILE_REL}\n{out}\n{err}".strip())
+    if not out.strip():
+        return {"ok": True, "message": "Already up to date, nothing to push.", "log": log}
+
+    code, out, err = _run_git("add", DATA_FILE_REL)
+    log.append(f"$ git add {DATA_FILE_REL}\n{out}\n{err}".strip())
+    if code != 0:
+        return {"ok": False, "step": "add", "message": err or "git add failed", "log": log}
+
+    code, out, err = _run_git("commit", "-m", "Board sync from local UI")
+    log.append(f"$ git commit -m 'Board sync from local UI'\n{out}\n{err}".strip())
+    if code != 0:
+        return {"ok": False, "step": "commit", "message": err or "git commit failed", "log": log}
+
+    code, out, err = _run_git("push", "origin", branch)
+    log.append(f"$ git push origin {branch}\n{out}\n{err}".strip())
+    if code != 0:
+        return {
+            "ok": False,
+            "step": "push",
+            "message": "Committed locally but push failed - someone else may have "
+                       "pushed in the meantime. Try syncing again.",
+            "log": log,
+        }
+
+    return {"ok": True, "message": f"Synced - your changes are pushed to {branch}.", "log": log}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -109,6 +193,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/sync":
+            result = sync_with_remote()
+            self._send_json(result, status=200 if result["ok"] else 409)
+            return
         if parsed.path == "/api/jobs":
             try:
                 payload = self._read_json_body()

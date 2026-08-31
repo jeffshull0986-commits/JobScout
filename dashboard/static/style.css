@@ -51,6 +51,14 @@ body {
   font-size: 13px;
 }
 
+.sync-status {
+  font-size: 12px;
+  max-width: 320px;
+}
+
+.sync-status.sync-ok { color: #006644; }
+.sync-status.sync-error { color: var(--danger); }
+
 .board {
   display: flex;
   gap: 12px;
