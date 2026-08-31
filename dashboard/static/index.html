@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Scout Board</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Job Scout Board</h1>
+    <div class="topbar-actions">
+      <span id="job-count" class="job-count"></span>
+      <button id="add-job-btn" class="btn btn-primary">+ Add Job</button>
+    </div>
+  </header>
+
+  <main id="board" class="board"></main>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <form id="job-form">
+        <input type="hidden" id="job-id" />
+
+        <label>Title
+          <input type="text" id="field-title" required />
+        </label>
+        <label>Company
+          <input type="text" id="field-company" required />
+        </label>
+        <label>Location
+          <input type="text" id="field-location" />
+        </label>
+
+        <div class="field-row">
+          <label>Stage
+            <select id="field-stage"></select>
+          </label>
+          <label>Fit Score
+            <input type="number" id="field-fit_score" min="0" max="10" />
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label>Source
+            <input type="text" id="field-source" />
+          </label>
+          <label>Salary Range
+            <input type="text" id="field-salary_range" />
+          </label>
+        </div>
+
+        <label>Job URL
+          <input type="url" id="field-job_url" />
+        </label>
+
+        <label>Score Reasoning
+          <textarea id="field-score_reasoning" rows="2"></textarea>
+        </label>
+
+        <label>Research Notes
+          <textarea id="field-research_notes" rows="3" placeholder="Company / market research goes here once this job hits Research Completed"></textarea>
+        </label>
+
+        <label>Your Notes
+          <textarea id="field-notes" rows="3" placeholder="Anything you want to remember about this one"></textarea>
+        </label>
+
+        <div id="gmail-evidence" class="gmail-evidence hidden">
+          <strong>Auto-advanced from Gmail:</strong>
+          <ul id="gmail-evidence-list"></ul>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="delete-job-btn" class="btn btn-danger">Delete</button>
+          <div class="modal-footer-right">
+            <button type="button" id="cancel-btn" class="btn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
