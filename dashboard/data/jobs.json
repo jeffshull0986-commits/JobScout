@@ -1,5 +1,5 @@
 {
-  "next_id": 6,
+  "next_id": 8,
   "jobs": [
     {
       "id": 1,
@@ -99,17 +99,63 @@
       "source": "LinkedIn",
       "job_url": "https://www.linkedin.com/jobs/view/4449212345/",
       "salary_range": "$182,000 - $215,000",
-      "stage": "applied",
+      "stage": "research_completed",
       "date_added": "2026-08-31",
       "date_applied": "2026-08-31",
+      "date_research_completed": "2026-08-31",
+      "date_screening": null,
+      "date_interview": null,
+      "date_passed": null,
+      "notes": "",
+      "research_notes": "Gametime is a mobile-first, last-minute live-event ticketing marketplace (concerts, sports, shows) \u2014 over 85% of transactions happen in-app, built around a Last-Minute Ticket Guarantee and two-tap checkout. In 2025-2026 they expanded omnichannel reach (digital wallet + social 'buy' buttons, ride-share/local-discovery API partnerships), lifting conversion ~25% vs. traditional marketplaces and growing last-minute buyers to ~40% of secondary-market sales. Self-reported GMV passed $1B in 2024 with continued growth into 2026; notably became Yahoo Sports' official ticketing partner (Dec 2025). Near-term roadmap is geographic expansion, algorithmic pricing, and platform monetization \u2014 all paid-media-intensive priorities that map directly onto this role's Google/Microsoft Ads budget ownership.\n",
+      "gmail_evidence": [
+        "Gmail: Thank you for applying to Gametime United from no-reply@us.greenhouse-mail.io, 2026-08-31"
+      ],
+      "networking_contacts": "Kent Callison \u2014 Director of Marketing \u2014 linkedin.com/in/kentcallison/ (confirmed Gametime Director of Marketing via search; this Senior Manager, Paid Search role would most plausibly report up through this position). No VP Marketing or CMO could be confirmed for Gametime via search \u2014 only one other loosely-affiliated Gametime LinkedIn profile (Carlyn Sylvester) surfaced without a clear marketing title, so not included.\n"
+    },
+    {
+      "id": 6,
+      "title": "Marketing Operations Manager",
+      "company": "Underdog",
+      "location": "Remote, US",
+      "fit_score": 10,
+      "score_reasoning": "Exact title match at a fantasy sports/sports betting company \u2014 dead-center domain fit. Operational framework, campaign delivery, dashboards, budget mgmt directly mirror your marketing ops background. Remote-first.",
+      "source": "LinkedIn",
+      "job_url": "https://www.linkedin.com/jobs/view/4460007339",
+      "salary_range": "$112,000 - $140,000 + equity",
+      "stage": "review",
+      "date_added": "2026-08-31",
+      "date_applied": null,
       "date_research_completed": null,
       "date_screening": null,
       "date_interview": null,
       "date_passed": null,
       "notes": "",
       "research_notes": "",
-      "gmail_evidence": [],
-      "networking_contacts": ""
+      "networking_contacts": "",
+      "gmail_evidence": []
+    },
+    {
+      "id": 7,
+      "title": "Growth Strategy & Operations Lead, Generative AI",
+      "company": "Scale AI",
+      "location": "San Francisco Bay Area",
+      "fit_score": 6,
+      "score_reasoning": "AI company domain match, senior growth/ops title. -4: this is a technical, SQL/Python-heavy marketplace supply-ops role (grows their AI-expert contributor base), not marketing execution \u2014 real stretch outside your core skill set despite the title.",
+      "source": "LinkedIn",
+      "job_url": "https://www.linkedin.com/jobs/view/4422177137",
+      "salary_range": "$180,800 - $226,000",
+      "stage": "review",
+      "date_added": "2026-08-31",
+      "date_applied": null,
+      "date_research_completed": null,
+      "date_screening": null,
+      "date_interview": null,
+      "date_passed": null,
+      "notes": "",
+      "research_notes": "",
+      "networking_contacts": "",
+      "gmail_evidence": []
     }
   ]
 }
