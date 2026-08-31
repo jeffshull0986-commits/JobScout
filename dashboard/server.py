@@ -5,10 +5,17 @@ Local Job Scout dashboard server.
 Pure standard library - no pip installs required. Serves the Kanban board
 frontend and a small JSON REST API backed by dashboard/data/jobs.json.
 
-Run:
+Run the server:
     python3 server.py [port]
+    Then open http://localhost:8420 (or whatever port you passed).
 
-Then open http://localhost:8420 (or whatever port you passed).
+CLI mode (used by the job-scout routine to write to the board without a
+server running - reads/writes dashboard/data/jobs.json directly):
+    python3 server.py list-jobs [--stage STAGE]
+    echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
+    python3 server.py advance-stage <id> <stage> [--evidence "text"]
+    echo "research text" | python3 server.py set-research <id> [--stage research_completed]
+    python3 server.py sync   # pull, then commit+push jobs.json if changed
 """
 import json
 import subprocess
@@ -58,6 +65,66 @@ def load_data():
 def save_data(data):
     with _lock:
         DATA_FILE.write_text(json.dumps(data, indent=2))
+
+
+def create_job(data, payload):
+    """Build a new job dict from payload, append it to data, and return it.
+
+    Shared by the HTTP POST /api/jobs handler and the `add-job` CLI command
+    (used by the job-scout routine) so both paths produce identically
+    shaped records.
+    """
+    job = {
+        "id": data["next_id"],
+        "title": payload.get("title", ""),
+        "company": payload.get("company", ""),
+        "location": payload.get("location", ""),
+        "fit_score": payload.get("fit_score"),
+        "score_reasoning": payload.get("score_reasoning", ""),
+        "source": payload.get("source", ""),
+        "job_url": payload.get("job_url", ""),
+        "salary_range": payload.get("salary_range"),
+        "stage": payload.get("stage", "review"),
+        "date_added": payload.get("date_added") or date.today().isoformat(),
+        "date_applied": None,
+        "date_research_completed": None,
+        "date_screening": None,
+        "date_interview": None,
+        "date_passed": None,
+        "notes": payload.get("notes", ""),
+        "research_notes": payload.get("research_notes", ""),
+        "gmail_evidence": payload.get("gmail_evidence", []),
+    }
+    data["jobs"].append(job)
+    data["next_id"] += 1
+    return job
+
+
+def apply_job_update(job, payload):
+    """Mutate `job` in place from payload fields. Raises ValueError on a
+    bad stage name. Shared by the HTTP PATCH handler and the
+    `advance-stage` CLI command.
+    """
+    new_stage = payload.get("stage")
+    if new_stage and new_stage != job["stage"]:
+        if new_stage not in STAGES:
+            raise ValueError(f"unknown stage '{new_stage}'")
+        job["stage"] = new_stage
+        date_field = STAGE_DATE_FIELD.get(new_stage)
+        if date_field and not job.get(date_field):
+            job[date_field] = date.today().isoformat()
+
+    for field in (
+        "title", "company", "location", "fit_score", "score_reasoning",
+        "source", "job_url", "salary_range", "notes", "research_notes",
+    ):
+        if field in payload:
+            job[field] = payload[field]
+
+    if "gmail_evidence" in payload:
+        job["gmail_evidence"] = payload["gmail_evidence"]
+    if "add_gmail_evidence" in payload:
+        job.setdefault("gmail_evidence", []).append(payload["add_gmail_evidence"])
 
 
 def _run_git(*args):
@@ -204,29 +271,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_error_json("invalid JSON body")
                 return
             data = load_data()
-            job = {
-                "id": data["next_id"],
-                "title": payload.get("title", ""),
-                "company": payload.get("company", ""),
-                "location": payload.get("location", ""),
-                "fit_score": payload.get("fit_score"),
-                "score_reasoning": payload.get("score_reasoning", ""),
-                "source": payload.get("source", ""),
-                "job_url": payload.get("job_url", ""),
-                "salary_range": payload.get("salary_range"),
-                "stage": payload.get("stage", "review"),
-                "date_added": payload.get("date_added") or date.today().isoformat(),
-                "date_applied": None,
-                "date_research_completed": None,
-                "date_screening": None,
-                "date_interview": None,
-                "date_passed": None,
-                "notes": payload.get("notes", ""),
-                "research_notes": payload.get("research_notes", ""),
-                "gmail_evidence": payload.get("gmail_evidence", []),
-            }
-            data["jobs"].append(job)
-            data["next_id"] += 1
+            job = create_job(data, payload)
             save_data(data)
             self._send_json(job, status=201)
             return
@@ -253,25 +298,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_error_json("job not found", status=404)
                 return
 
-            new_stage = payload.get("stage")
-            if new_stage and new_stage != job["stage"]:
-                if new_stage not in STAGES:
-                    self._send_error_json(f"unknown stage '{new_stage}'")
-                    return
-                job["stage"] = new_stage
-                date_field = STAGE_DATE_FIELD.get(new_stage)
-                if date_field and not job.get(date_field):
-                    job[date_field] = date.today().isoformat()
-
-            for field in (
-                "title", "company", "location", "fit_score", "score_reasoning",
-                "source", "job_url", "salary_range", "notes", "research_notes",
-            ):
-                if field in payload:
-                    job[field] = payload[field]
-
-            if "gmail_evidence" in payload:
-                job["gmail_evidence"] = payload["gmail_evidence"]
+            try:
+                apply_job_update(job, payload)
+            except ValueError as e:
+                self._send_error_json(str(e))
+                return
 
             save_data(data)
             self._send_json(job)
@@ -302,8 +333,102 @@ class Handler(BaseHTTPRequestHandler):
         pass  # keep the console quiet
 
 
+def _arg_value(args, flag):
+    return args[args.index(flag) + 1] if flag in args else None
+
+
+def cmd_add_job():
+    """Read a job payload as JSON on stdin, append it, print the saved job.
+
+    Used by the job-scout routine to write new Review-stage cards without
+    going through the (likely-not-running) local HTTP server.
+    """
+    payload = json.loads(sys.stdin.read())
+    data = load_data()
+    job = create_job(data, payload)
+    save_data(data)
+    print(json.dumps(job, indent=2))
+
+
+def cmd_advance_stage(args):
+    if len(args) < 2:
+        print("usage: server.py advance-stage <id> <stage> [--evidence TEXT]", file=sys.stderr)
+        sys.exit(1)
+    job_id, new_stage = int(args[0]), args[1]
+    evidence = _arg_value(args, "--evidence")
+
+    data = load_data()
+    job = next((j for j in data["jobs"] if j["id"] == job_id), None)
+    if job is None:
+        print(f"error: no job with id {job_id}", file=sys.stderr)
+        sys.exit(1)
+
+    payload = {"stage": new_stage}
+    if evidence:
+        payload["add_gmail_evidence"] = evidence
+    try:
+        apply_job_update(job, payload)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    save_data(data)
+    print(json.dumps(job, indent=2))
+
+
+def cmd_list_jobs(args):
+    data = load_data()
+    jobs = data["jobs"]
+    stage = _arg_value(args, "--stage")
+    if stage:
+        jobs = [j for j in jobs if j["stage"] == stage]
+    print(json.dumps(jobs, indent=2))
+
+
+def cmd_set_research(args):
+    if not args:
+        print("usage: server.py set-research <id> [--stage STAGE] < research.txt", file=sys.stderr)
+        sys.exit(1)
+    job_id = int(args[0])
+    research_text = sys.stdin.read()
+    stage = _arg_value(args, "--stage")
+
+    data = load_data()
+    job = next((j for j in data["jobs"] if j["id"] == job_id), None)
+    if job is None:
+        print(f"error: no job with id {job_id}", file=sys.stderr)
+        sys.exit(1)
+
+    payload = {"research_notes": research_text}
+    if stage:
+        payload["stage"] = stage
+    apply_job_update(job, payload)
+    save_data(data)
+    print(json.dumps(job, indent=2))
+
+
+def cmd_sync():
+    result = sync_with_remote()
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result["ok"] else 1)
+
+
+CLI_COMMANDS = {
+    "add-job": lambda args: cmd_add_job(),
+    "advance-stage": cmd_advance_stage,
+    "list-jobs": cmd_list_jobs,
+    "set-research": cmd_set_research,
+    "sync": lambda args: cmd_sync(),
+}
+
+
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8420
+    args = sys.argv[1:]
+    if args and args[0] in CLI_COMMANDS:
+        CLI_COMMANDS[args[0]](args[1:])
+        return
+
+    port = int(args[0]) if args else 8420
     server = ThreadingHTTPServer(("localhost", port), Handler)
     print(f"Job Scout dashboard running at http://localhost:{port}")
     print("Press Ctrl+C to stop.")

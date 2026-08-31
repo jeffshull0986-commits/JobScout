@@ -29,12 +29,38 @@ Pass a different port if 8420 is taken: `python3 server.py 8888`.
   (e.g. `date_applied`) automatically, so the history persists even if you
   drag it elsewhere later.
 
-## Not yet wired up (Phase B)
+## Staying in sync with the cloud routine
 
-This is the board itself — it does **not** yet auto-receive new jobs from
-the daily job-scout routine or auto-advance stages from Gmail. That
-routine runs in a cloud session with no direct network path to your
-machine, so the plan is: the routine writes new/updated entries into this
-same `data/jobs.json` and commits+pushes them to the repo, and this app
-picks them up on your next `git pull`. Still need to settle exactly how/
-when that push happens before wiring it in.
+The daily job-scout routine runs in a cloud session with no direct network
+path to your machine — the repo is the only thing connecting them. So:
+
+- **The routine → you:** at the start of each run it pulls the latest
+  `data/jobs.json`, writes new Review cards and any Gmail-driven stage
+  moves, then commits and pushes straight to the branch it's running on
+  (`main`, once this is merged) — no approval prompt, per your request.
+  Your board picks that up next time you load the page after a `git
+  pull`, or by clicking **Sync** in the UI.
+- **You → the routine:** drag cards around, edit notes, whatever — then
+  hit **Sync** (top right) to pull+commit+push your local changes back to
+  the repo, so the next automated run sees them.
+
+Both directions use the same underlying logic
+(`server.py`'s `sync_with_remote()` — pull, then commit+push
+`data/jobs.json` if it changed), whether triggered by the Sync button or
+by the routine's own CLI call (`python3 server.py sync`).
+
+**Conflict risk:** if you're mid-edit locally at the exact moment the
+routine pushes, a `git pull` can hit a merge conflict on `jobs.json`. The
+sync logic does not attempt to auto-resolve this — it reports the failure
+and leaves your working copy alone. If that happens, resolve it manually
+in a terminal (`git status` in the repo root will show the conflict).
+
+## CLI (used by the routine, but you can run these too)
+
+```
+python3 server.py list-jobs [--stage STAGE]
+echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
+python3 server.py advance-stage <id> <stage> [--evidence "text"]
+echo "research text" | python3 server.py set-research <id> [--stage research_completed]
+python3 server.py sync
+```
