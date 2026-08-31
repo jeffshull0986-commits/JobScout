@@ -64,9 +64,20 @@ in a terminal (`git status` in the repo root will show the conflict).
 
 ```
 python3 server.py list-jobs [--stage STAGE]
+python3 server.py needs-research
 echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
 python3 server.py advance-stage <id> <stage> [--evidence "text"]
 echo "research text" | python3 server.py set-research <id> [--stage research_completed]
 echo "contacts text" | python3 server.py set-contacts <id>
 python3 server.py sync
 ```
+
+## Catching up research on demand
+
+Research (company research + LinkedIn networking contacts) normally only
+happens during a full job-scout run. If you've moved a card to Applied
+outside of that — via drag-and-drop, say — and don't want to wait for the
+next scheduled run, just ask: "research my applied jobs" (or similar).
+That runs a lighter sweep — `needs-research` to find any `applied`-stage
+card missing research and/or contacts, fills in just what's missing, and
+pushes — without kicking off a whole new job search.

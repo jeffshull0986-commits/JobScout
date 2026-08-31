@@ -12,6 +12,7 @@ Run the server:
 CLI mode (used by the job-scout routine to write to the board without a
 server running - reads/writes dashboard/data/jobs.json directly):
     python3 server.py list-jobs [--stage STAGE]
+    python3 server.py needs-research   # applied-stage jobs missing research and/or contacts
     echo '{"title": "...", "company": "...", "stage": "review"}' | python3 server.py add-job
     python3 server.py advance-stage <id> <stage> [--evidence "text"]
     echo "research text" | python3 server.py set-research <id> [--stage research_completed]
@@ -388,6 +389,21 @@ def cmd_list_jobs(args):
     print(json.dumps(jobs, indent=2))
 
 
+def cmd_needs_research(args):
+    """List `applied`-stage jobs missing research_notes and/or networking_contacts
+    (OR, not AND - missing just one still qualifies). Used by the manual
+    research-sweep trigger to find what to catch up on without a full
+    job-scout run.
+    """
+    data = load_data()
+    jobs = [
+        j for j in data["jobs"]
+        if j["stage"] == "applied"
+        and (not j.get("research_notes", "").strip() or not j.get("networking_contacts", "").strip())
+    ]
+    print(json.dumps(jobs, indent=2))
+
+
 def cmd_set_research(args):
     if not args:
         print("usage: server.py set-research <id> [--stage STAGE] < research.txt", file=sys.stderr)
@@ -438,6 +454,7 @@ CLI_COMMANDS = {
     "add-job": lambda args: cmd_add_job(),
     "advance-stage": cmd_advance_stage,
     "list-jobs": cmd_list_jobs,
+    "needs-research": cmd_needs_research,
     "set-research": cmd_set_research,
     "set-contacts": cmd_set_contacts,
     "sync": lambda args: cmd_sync(),
