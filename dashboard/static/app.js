@@ -107,6 +107,7 @@ function openModal(job) {
   document.getElementById("field-job_url").value = job?.job_url ?? "";
   document.getElementById("field-score_reasoning").value = job?.score_reasoning ?? "";
   document.getElementById("field-research_notes").value = job?.research_notes ?? "";
+  document.getElementById("field-networking_contacts").value = job?.networking_contacts ?? "";
   document.getElementById("field-notes").value = job?.notes ?? "";
 
   const stageSelect = document.getElementById("field-stage");
@@ -166,6 +167,7 @@ jobForm.addEventListener("submit", async (e) => {
     job_url: document.getElementById("field-job_url").value,
     score_reasoning: document.getElementById("field-score_reasoning").value,
     research_notes: document.getElementById("field-research_notes").value,
+    networking_contacts: document.getElementById("field-networking_contacts").value,
     notes: document.getElementById("field-notes").value,
     stage: document.getElementById("field-stage").value,
   };
