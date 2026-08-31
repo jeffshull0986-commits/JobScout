@@ -1,5 +1,5 @@
 {
-  "next_id": 5,
+  "next_id": 6,
   "jobs": [
     {
       "id": 1,
@@ -74,6 +74,27 @@
       "source": "LinkedIn",
       "job_url": "https://www.linkedin.com/jobs/view/4424268671",
       "salary_range": "$176,450 - $216,160",
+      "stage": "review",
+      "date_added": "2026-08-31",
+      "date_applied": null,
+      "date_research_completed": null,
+      "date_screening": null,
+      "date_interview": null,
+      "date_passed": null,
+      "notes": "",
+      "research_notes": "",
+      "gmail_evidence": []
+    },
+    {
+      "id": 5,
+      "title": "Senior Manager, Paid Search",
+      "company": "Gametime",
+      "location": "San Francisco, CA",
+      "fit_score": 9,
+      "score_reasoning": "Owns a multi-million-dollar Google/Microsoft Ads budget for a live-event ticketing marketplace \u2014 directly mirrors your Repeat paid-media scaling work. Exact skills match (Google Ads, SA360). -1: sports-adjacent (ticketing, not a league/team) rather than a dead-center sports company.",
+      "source": "LinkedIn",
+      "job_url": "https://www.linkedin.com/jobs/view/4449212345/",
+      "salary_range": "$182,000 - $215,000",
       "stage": "review",
       "date_added": "2026-08-31",
       "date_applied": null,
