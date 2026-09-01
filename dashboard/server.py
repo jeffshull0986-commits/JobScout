@@ -185,6 +185,25 @@ def bootstrap_git_auth():
     _run_git("config", "user.name", os.environ.get("GIT_AUTHOR_NAME", "Job Scout Board"))
 
 
+def ensure_on_branch():
+    """Move off detached HEAD onto a real local branch, if needed.
+
+    Hosted builders (Render included) check out a specific commit SHA
+    rather than a branch tip, which leaves the clone in detached HEAD -
+    sync_with_remote() then has no branch name to pull/push against. Set a
+    GIT_BRANCH env var to override which branch to land on (default:
+    main). No-op if already on a real branch, which covers local dev and
+    any host that doesn't do this.
+    """
+    code, out, _ = _run_git("rev-parse", "--abbrev-ref", "HEAD")
+    if code == 0 and out and out != "HEAD":
+        return
+
+    branch = os.environ.get("GIT_BRANCH", "main")
+    _run_git("fetch", "origin", branch)
+    _run_git("checkout", "-B", branch, f"origin/{branch}")
+
+
 def sync_with_remote():
     """Pull latest board state, then commit+push any local changes.
 
@@ -519,6 +538,7 @@ CLI_COMMANDS = {
 
 def main():
     bootstrap_git_auth()
+    ensure_on_branch()
 
     args = sys.argv[1:]
     if args and args[0] in CLI_COMMANDS:
