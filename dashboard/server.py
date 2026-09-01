@@ -192,9 +192,14 @@ def bootstrap_git_auth():
     on. Detecting "already has a credential" and bailing out there used to
     silently leave that unusable token in place.
     """
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        return
+    # .strip() guards against a stray trailing newline or space from
+    # pasting the token into a host's env var UI - left in, it corrupts
+    # the URL below into something git can't parse at all ("fatal: 'origin'
+    # does not appear to be a git repository"), which looks nothing like a
+    # credentials problem and is a nasty thing to have to debug blind.
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not token or any(c.isspace() for c in token):
+        return  # unset, or still malformed after stripping - leave origin alone
 
     code, url, _ = _run_git("remote", "get-url", "origin")
     if code != 0 or not url:
