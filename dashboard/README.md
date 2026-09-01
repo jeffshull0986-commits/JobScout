@@ -60,6 +60,28 @@ sync logic does not attempt to auto-resolve this — it reports the failure
 and leaves your working copy alone. If that happens, resolve it manually
 in a terminal (`git status` in the repo root will show the conflict).
 
+## Deploying (e.g. Render free tier)
+
+The server binds `0.0.0.0` and reads its port from a `PORT` env var if set,
+so it runs unmodified on a host like [Render](https://render.com) (free Web
+Service tier):
+
+1. render.com → New → Web Service → connect the `JobScout` repo.
+2. Root directory: `dashboard`. Start command: `python3 server.py`.
+3. Add a `GITHUB_TOKEN` env var: a GitHub personal access token (repo
+   scope) for the account that should own the Sync commits. On startup the
+   server injects this into the `origin` remote's URL so `git push` in
+   `sync_with_remote()` can authenticate from the hosted container — this
+   is separate from whatever credentials Render itself uses to pull your
+   code for deploys. Optionally also set `GIT_AUTHOR_NAME` /
+   `GIT_AUTHOR_EMAIL` if you don't want commits attributed to `Job Scout
+   Board <jobscout-bot@users.noreply.github.com>`.
+4. Deploy. Render gives you a URL to load the board from.
+
+Free-tier instances spin down after 15 minutes of no traffic and take
+~30-60s to wake back up on the next request — expected for a personal
+dashboard you check once a day, not a problem to debug.
+
 ## CLI (used by the routine, but you can run these too)
 
 ```

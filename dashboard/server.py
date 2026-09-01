@@ -19,6 +19,7 @@ server running - reads/writes dashboard/data/jobs.json directly):
     python3 server.py sync   # pull, then commit+push jobs.json if changed
 """
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -143,6 +144,36 @@ def _run_git(*args):
         return 1, "", "git command timed out after 30s"
     except FileNotFoundError:
         return 1, "", "git executable not found on PATH"
+
+
+def bootstrap_git_auth():
+    """Give git push credentials to a hosted deployment (e.g. Render).
+
+    Locally, git already has your own credentials configured, so this is a
+    no-op there. On a host, set a GITHUB_TOKEN env var (a GitHub personal
+    access token with repo scope) and this injects it into the `origin`
+    remote URL on startup so sync_with_remote()'s `git push` can
+    authenticate. Also sets a git identity (GIT_AUTHOR_NAME/EMAIL env vars,
+    or a default) if the container doesn't have one.
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        return
+
+    code, url, _ = _run_git("remote", "get-url", "origin")
+    if code != 0 or not url or "@github.com" in url:
+        return  # no remote, or it already has credentials embedded
+
+    if url.startswith("https://github.com/"):
+        path = url[len("https://github.com/"):]
+    elif url.startswith("git@github.com:"):
+        path = url[len("git@github.com:"):]
+    else:
+        return  # unrecognized remote format - leave it alone
+
+    _run_git("remote", "set-url", "origin", f"https://x-access-token:{token}@github.com/{path}")
+    _run_git("config", "user.email", os.environ.get("GIT_AUTHOR_EMAIL", "jobscout-bot@users.noreply.github.com"))
+    _run_git("config", "user.name", os.environ.get("GIT_AUTHOR_NAME", "Job Scout Board"))
 
 
 def sync_with_remote():
@@ -445,14 +476,16 @@ CLI_COMMANDS = {
 
 
 def main():
+    bootstrap_git_auth()
+
     args = sys.argv[1:]
     if args and args[0] in CLI_COMMANDS:
         CLI_COMMANDS[args[0]](args[1:])
         return
 
-    port = int(args[0]) if args else 8420
-    server = ThreadingHTTPServer(("localhost", port), Handler)
-    print(f"Job Scout dashboard running at http://localhost:{port}")
+    port = int(args[0]) if args else int(os.environ.get("PORT", 8420))
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    print(f"Job Scout dashboard running at http://0.0.0.0:{port}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
