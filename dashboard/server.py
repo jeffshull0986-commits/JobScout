@@ -205,17 +205,24 @@ def ensure_on_branch():
 
 
 def sync_with_remote():
-    """Pull latest board state, then commit+push any local changes.
+    """Commit any local changes, then pull, then push.
 
     Operates on whatever branch is currently checked out (via its
     configured upstream), rather than a hardcoded branch name - this repo
     may be on a feature branch during development and on `main` once this
     is merged, and the sync logic should work correctly in both cases.
 
-    Returns a dict describing what happened - never raises. A pull conflict
-    or push failure is reported back rather than auto-resolved, since
-    silently picking a side on a conflicted jobs.json could throw away
-    either the user's local edits or what the cloud routine wrote.
+    Local changes are committed *before* pulling, not after - pulling into
+    a dirty working tree makes git refuse to touch a file with uncommitted
+    edits even when the incoming change wouldn't really conflict with it,
+    which looks exactly like a merge conflict but isn't one. Committing
+    first lets `git pull --no-rebase` do a real (usually clean) merge; a
+    genuine conflict from concurrent edits to the same lines is still
+    reported rather than auto-resolved, since silently picking a side on
+    conflicting jobs.json content could throw away either the user's local
+    edits or what the cloud routine wrote.
+
+    Returns a dict describing what happened - never raises.
     """
     log = []
 
@@ -230,6 +237,21 @@ def sync_with_remote():
         }
     branch = out
 
+    code, out, err = _run_git("status", "--porcelain", "--", DATA_FILE_REL)
+    log.append(f"$ git status --porcelain -- {DATA_FILE_REL}\n{out}\n{err}".strip())
+    has_local_changes = bool(out.strip())
+
+    if has_local_changes:
+        code, out, err = _run_git("add", DATA_FILE_REL)
+        log.append(f"$ git add {DATA_FILE_REL}\n{out}\n{err}".strip())
+        if code != 0:
+            return {"ok": False, "step": "add", "message": err or "git add failed", "log": log}
+
+        code, out, err = _run_git("commit", "-m", "Board sync from local UI")
+        log.append(f"$ git commit -m 'Board sync from local UI'\n{out}\n{err}".strip())
+        if code != 0:
+            return {"ok": False, "step": "commit", "message": err or "git commit failed", "log": log}
+
     code, out, err = _run_git("pull", "--no-rebase", "origin", branch)
     log.append(f"$ git pull --no-rebase origin {branch}\n{out}\n{err}".strip())
     if code != 0:
@@ -241,20 +263,8 @@ def sync_with_remote():
             "log": log,
         }
 
-    code, out, err = _run_git("status", "--porcelain", "--", DATA_FILE_REL)
-    log.append(f"$ git status --porcelain -- {DATA_FILE_REL}\n{out}\n{err}".strip())
-    if not out.strip():
+    if not has_local_changes:
         return {"ok": True, "message": "Already up to date, nothing to push.", "log": log}
-
-    code, out, err = _run_git("add", DATA_FILE_REL)
-    log.append(f"$ git add {DATA_FILE_REL}\n{out}\n{err}".strip())
-    if code != 0:
-        return {"ok": False, "step": "add", "message": err or "git add failed", "log": log}
-
-    code, out, err = _run_git("commit", "-m", "Board sync from local UI")
-    log.append(f"$ git commit -m 'Board sync from local UI'\n{out}\n{err}".strip())
-    if code != 0:
-        return {"ok": False, "step": "commit", "message": err or "git commit failed", "log": log}
 
     code, out, err = _run_git("push", "origin", branch)
     log.append(f"$ git push origin {branch}\n{out}\n{err}".strip())

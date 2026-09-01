@@ -206,6 +206,13 @@ syncBtn.addEventListener("click", async () => {
     const result = await res.json();
     syncStatus.textContent = result.message;
     syncStatus.className = "sync-status " + (result.ok ? "sync-ok" : "sync-error");
+    if (result.log) {
+      // Full git command output isn't worth cluttering the UI with, but it's
+      // exactly what you need when troubleshooting a failed sync - hover the
+      // status text, or check the console.
+      syncStatus.title = result.log.join("\n\n");
+      console.log("Sync log:\n" + result.log.join("\n\n"));
+    }
     if (result.ok) {
       await fetchJobs();
     }
