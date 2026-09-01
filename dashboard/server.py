@@ -22,6 +22,7 @@ import base64
 import hmac
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -155,6 +156,23 @@ def _run_git(*args):
         return 1, "", "git executable not found on PATH"
 
 
+def bootstrap_git_identity():
+    """Set a git commit identity, unconditionally.
+
+    A fresh host's container generally has no git identity configured at
+    all, and `git commit` hard-fails without one - so this needs to happen
+    regardless of whether GITHUB_TOKEN (below) is set, or the very first
+    local commit in sync_with_remote() breaks with a confusing "Author
+    identity unknown" error instead of the real problem (a missing/invalid
+    token) surfacing later at the push step where it belongs. Override via
+    GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL env vars if you want commits
+    attributed to something other than the default bot identity. No-op in
+    practice locally, where git already has your own identity configured.
+    """
+    _run_git("config", "user.email", os.environ.get("GIT_AUTHOR_EMAIL", "jobscout-bot@users.noreply.github.com"))
+    _run_git("config", "user.name", os.environ.get("GIT_AUTHOR_NAME", "Job Scout Board"))
+
+
 def bootstrap_git_auth():
     """Give git push credentials to a hosted deployment (e.g. Render).
 
@@ -162,27 +180,33 @@ def bootstrap_git_auth():
     no-op there. On a host, set a GITHUB_TOKEN env var (a GitHub personal
     access token with repo scope) and this injects it into the `origin`
     remote URL on startup so sync_with_remote()'s `git push` can
-    authenticate. Also sets a git identity (GIT_AUTHOR_NAME/EMAIL env vars,
-    or a default) if the container doesn't have one.
+    authenticate. Without it, commits can still be made locally (see
+    bootstrap_git_identity above) but push will fail - which is the
+    correct, diagnosable failure mode for a missing token.
+
+    Always rewrites the URL to use *our* token, rather than skipping just
+    because some credential is already embedded in it - a builder like
+    Render commonly clones using its own GitHub App installation token
+    embedded in the origin URL, which is scoped for the build/clone step
+    only and is not something a push from inside the running app can rely
+    on. Detecting "already has a credential" and bailing out there used to
+    silently leave that unusable token in place.
     """
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         return
 
     code, url, _ = _run_git("remote", "get-url", "origin")
-    if code != 0 or not url or "@github.com" in url:
-        return  # no remote, or it already has credentials embedded
+    if code != 0 or not url:
+        return  # no remote to fix
 
-    if url.startswith("https://github.com/"):
-        path = url[len("https://github.com/"):]
-    elif url.startswith("git@github.com:"):
-        path = url[len("git@github.com:"):]
-    else:
-        return  # unrecognized remote format - leave it alone
+    match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+    if not match:
+        return  # not a recognizable GitHub remote - leave it alone
 
-    _run_git("remote", "set-url", "origin", f"https://x-access-token:{token}@github.com/{path}")
-    _run_git("config", "user.email", os.environ.get("GIT_AUTHOR_EMAIL", "jobscout-bot@users.noreply.github.com"))
-    _run_git("config", "user.name", os.environ.get("GIT_AUTHOR_NAME", "Job Scout Board"))
+    authed_url = f"https://x-access-token:{token}@github.com/{match.group(1)}.git"
+    if url != authed_url:
+        _run_git("remote", "set-url", "origin", authed_url)
 
 
 def ensure_on_branch():
@@ -547,6 +571,7 @@ CLI_COMMANDS = {
 
 
 def main():
+    bootstrap_git_identity()
     bootstrap_git_auth()
     ensure_on_branch()
 
