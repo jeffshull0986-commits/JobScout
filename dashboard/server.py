@@ -191,6 +191,13 @@ def bootstrap_git_auth():
     only and is not something a push from inside the running app can rely
     on. Detecting "already has a credential" and bailing out there used to
     silently leave that unusable token in place.
+
+    Some hosts' runtime containers have no `origin` remote at all (the
+    build container that had one is separate from the one that ends up
+    running the app) - `git remote set-url` on a nonexistent remote fails
+    silently, so this creates one via `git remote add` when needed,
+    falling back to a GITHUB_REPO env var (owner/repo) to know what to
+    point it at, since there's no existing URL to parse in that case.
     """
     # .strip() guards against a stray trailing newline or space from
     # pasting the token into a host's env var UI - left in, it corrupts
@@ -202,15 +209,25 @@ def bootstrap_git_auth():
         return  # unset, or still malformed after stripping - leave origin alone
 
     code, url, _ = _run_git("remote", "get-url", "origin")
-    if code != 0 or not url:
-        return  # no remote to fix
+    has_origin = code == 0 and bool(url)
 
-    match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
-    if not match:
-        return  # not a recognizable GitHub remote - leave it alone
+    repo_path = None
+    if has_origin:
+        match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+        repo_path = match.group(1) if match else None
 
-    authed_url = f"https://x-access-token:{token}@github.com/{match.group(1)}.git"
-    if url != authed_url:
+    if repo_path is None:
+        repo_path = os.environ.get("GITHUB_REPO", "jeffshull0986-commits/JobScout").strip()
+        if repo_path.endswith(".git"):
+            repo_path = repo_path[:-len(".git")]
+        if "/" not in repo_path:
+            return  # nothing usable to build a remote URL from
+
+    authed_url = f"https://x-access-token:{token}@github.com/{repo_path}.git"
+
+    if not has_origin:
+        _run_git("remote", "add", "origin", authed_url)
+    elif url != authed_url:
         _run_git("remote", "set-url", "origin", authed_url)
 
 
