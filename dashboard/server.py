@@ -309,6 +309,39 @@ def sync_with_remote():
     return {"ok": True, "message": f"Synced - your changes are pushed to {branch}.", "log": log}
 
 
+def git_debug_info():
+    """Read-only git diagnostics for troubleshooting sync from the browser.
+
+    A free hosted instance (Render included) typically has no shell
+    access, which makes a broken sync impossible to diagnose from outside
+    the running process. This exposes exactly what sync_with_remote() and
+    the bootstrap functions see, gated behind the same auth as everything
+    else. GITHUB_TOKEN's value is never returned - only whether it's set -
+    and it's redacted out of any command output that might otherwise leak
+    it (the origin URL has it embedded).
+    """
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+
+    def run(*args):
+        code, out, err = _run_git(*args)
+        if token:
+            out = out.replace(token, "***REDACTED***")
+            err = err.replace(token, "***REDACTED***")
+        return {"code": code, "out": out, "err": err}
+
+    return {
+        "is_git_repo": run("rev-parse", "--show-toplevel"),
+        "current_branch": run("rev-parse", "--abbrev-ref", "HEAD"),
+        "remote_url": run("remote", "-v"),
+        "working_tree_status": run("status", "--porcelain"),
+        "last_commit": run("log", "-1", "--oneline"),
+        "git_user_email": run("config", "--get", "user.email"),
+        "git_user_name": run("config", "--get", "user.name"),
+        "github_token_env_set": bool(token),
+        "git_branch_env": os.environ.get("GIT_BRANCH"),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def _authenticated(self):
         if not AUTH_PASSWORD:
@@ -380,6 +413,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/jobs":
             self._send_json(load_data())
+            return
+        if parsed.path == "/api/debug/git":
+            self._send_json(git_debug_info())
             return
         self._serve_static(parsed.path)
 
