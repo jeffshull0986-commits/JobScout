@@ -1,0 +1,3 @@
+# Intentionally empty - server.py uses only the Python standard library.
+# This file exists so Render's default build command (`pip install -r
+# requirements.txt`) succeeds instead of failing on a missing file.
