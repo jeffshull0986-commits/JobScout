@@ -18,6 +18,8 @@ server running - reads/writes dashboard/data/jobs.json directly):
     echo "contacts text" | python3 server.py set-contacts <id>
     python3 server.py sync   # pull, then commit+push jobs.json if changed
 """
+import base64
+import hmac
 import json
 import os
 import subprocess
@@ -33,6 +35,13 @@ REPO_ROOT = ROOT.parent
 DATA_FILE = ROOT / "data" / "jobs.json"
 DATA_FILE_REL = "dashboard/data/jobs.json"
 STATIC_DIR = ROOT / "static"
+
+# HTTP Basic Auth is opt-in: unset DASHBOARD_PASSWORD (the default, e.g.
+# when running locally) and the whole app is open, exactly as before. Set
+# it - typically as a hosted-deployment env var, never committed - to
+# require a login for every route, API included.
+AUTH_USER = os.environ.get("DASHBOARD_USER", "admin")
+AUTH_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
 
 STAGES = [
     "review",
@@ -243,6 +252,27 @@ def sync_with_remote():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _authenticated(self):
+        if not AUTH_PASSWORD:
+            return True
+        header = self.headers.get("Authorization", "")
+        if not header.startswith("Basic "):
+            return False
+        try:
+            user, _, password = base64.b64decode(header[len("Basic "):]).decode("utf-8").partition(":")
+        except (ValueError, UnicodeDecodeError):
+            return False
+        return hmac.compare_digest(user, AUTH_USER) and hmac.compare_digest(password, AUTH_PASSWORD)
+
+    def _send_auth_challenge(self):
+        body = b"Authentication required"
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Job Scout Dashboard"')
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -286,6 +316,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if not self._authenticated():
+            self._send_auth_challenge()
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/jobs":
             self._send_json(load_data())
@@ -293,6 +326,9 @@ class Handler(BaseHTTPRequestHandler):
         self._serve_static(parsed.path)
 
     def do_POST(self):
+        if not self._authenticated():
+            self._send_auth_challenge()
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/sync":
             result = sync_with_remote()
@@ -312,6 +348,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send_error_json("not found", status=404)
 
     def do_PATCH(self):
+        if not self._authenticated():
+            self._send_auth_challenge()
+            return
         parsed = urlparse(self.path)
         parts = parsed.path.strip("/").split("/")
         if len(parts) == 3 and parts[0] == "api" and parts[1] == "jobs":
@@ -344,6 +383,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send_error_json("not found", status=404)
 
     def do_DELETE(self):
+        if not self._authenticated():
+            self._send_auth_challenge()
+            return
         parsed = urlparse(self.path)
         parts = parsed.path.strip("/").split("/")
         if len(parts) == 3 and parts[0] == "api" and parts[1] == "jobs":

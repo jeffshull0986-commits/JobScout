@@ -82,6 +82,17 @@ Free-tier instances spin down after 15 minutes of no traffic and take
 ~30-60s to wake back up on the next request — expected for a personal
 dashboard you check once a day, not a problem to debug.
 
+### Password-protecting a hosted deployment
+
+Your job data (companies you're targeting, salary numbers, application
+status) shouldn't sit on a public URL with no login. Set a
+`DASHBOARD_PASSWORD` env var on Render and every route — the board and the
+API — requires an HTTP Basic Auth login before it responds; the browser
+will prompt for it. Optionally set `DASHBOARD_USER` too (defaults to
+`admin`). Leave `DASHBOARD_PASSWORD` unset (the default locally) and the
+app stays open, exactly as before — this is opt-in so local runs never
+need a password.
+
 ## CLI (used by the routine, but you can run these too)
 
 ```
