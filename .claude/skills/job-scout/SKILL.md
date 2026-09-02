@@ -30,8 +30,8 @@ A lighter-weight path than the full routine — finds and fills research/network
    - If `networking_contacts` is blank: run Phase 5.7b (LinkedIn networking contacts), save via `echo "<contacts>" | python3 dashboard/server.py set-contacts <id>`.
    - A failure researching one company must not block the rest — same rule as Phase 5.7.
 4. **Advance the stage**: once both fields are filled for a card (whether they needed filling this sweep or already had content from before), run `python3 dashboard/server.py advance-stage <id> research_completed` — a no-op if it's already there or further along.
-5. **Push**: `python3 dashboard/server.py sync` (same as Phase 5.8) — no confirmation needed, same standing authorization as the daily routine.
-6. **Report back**: how many cards were found, what got filled in for each (research only / contacts only / both), and confirm the push succeeded. No need for the full Results Table / Score Justifications format — no new search happened, so there's nothing to rank.
+5. **Push and merge**: `python3 dashboard/server.py sync` (same as Phase 5.8), then Phase 5.9 (open/merge the PR to `main`) — no confirmation needed, same standing authorization as the daily routine.
+6. **Report back**: how many cards were found, what got filled in for each (research only / contacts only / both), and confirm the push succeeded and merged to `main`. No need for the full Results Table / Score Justifications format — no new search happened, so there's nothing to rank.
 
 ## Phase 1: Check for Saved Profile
 
@@ -401,7 +401,7 @@ After the table, include a brief justification for each role:
 
 > Found X jobs across Y sources. Z passed your minimum score of [threshold]/10.
 
-If `dashboard/data/jobs.json` exists, append a line summarizing the board pass: how many new cards were added, how many existing cards were auto-advanced by the Gmail scan (and to which stages), how many got a research pass, and whether the final push succeeded — plus any failure notes from Steps 3.0/5.6/5.8.
+If `dashboard/data/jobs.json` exists, append a line summarizing the board pass: how many new cards were added, how many existing cards were auto-advanced by the Gmail scan (and to which stages), how many got a research pass, whether the final push succeeded, and whether the resulting PR was merged to `main` (with the PR link) — plus any failure notes from Steps 3.0/5.6/5.8/5.9.
 
 ### Follow-up
 
@@ -525,6 +525,21 @@ python3 dashboard/server.py sync
 ```
 
 This pulls first (picking up anything the user pushed from the local UI since Step 3.0), then commits and pushes any `jobs.json` changes straight to the branch this checkout is on — **no confirmation needed**, this has been explicitly authorized by the user. Don't retry more than once if it fails (re-running `sync` is safe/idempotent); if it still fails, note it plainly in the Summary Stats output ("Board changes could not be pushed automatically this run — click Sync in the dashboard to push manually") rather than silently dropping the update.
+
+## Phase 5.9: Open and Merge PR to Main
+
+Skip if `dashboard/data/jobs.json` doesn't exist (no board run happened), or if the checked-out branch already *is* `main` (nothing to merge). Run this last, after Phase 5.8, and only if Phase 5.8 reported `ok: true`.
+
+The user has explicitly authorized ending each automated run fully merged to `main` with **no manual review step** — this phase must complete the merge itself, not stop at opening the PR and waiting.
+
+1. **Check for a diff against `main`**: fetch `origin/main` and diff the current branch against it. If there's nothing to merge (0 commits ahead), skip this phase entirely — nothing to do.
+2. **Check for an existing open PR** from this branch into `main` (`gh pr list --head <branch> --base main --state open`, or the equivalent `mcp__github__list_pull_requests` / `pull_request_read` call when using the GitHub MCP tools). Reuse it rather than opening a duplicate if one exists.
+3. **Open the PR** if none exists — same title/body conventions as any other PR this session creates (see the global PR-creation instructions: check for a template, summarize the run's changes, include the test plan of what was verified, attribution footer). Base branch is always `main`.
+4. **Check mergeability** before merging: the PR's mergeable/merge state must be clean and any CI checks on its head commit must be passing (or absent — a board-only `jobs.json` change may have no CI configured, which is fine). If there's a real merge conflict against `main`, resolve it the standard way (merge `main` into the branch, regenerate nothing since `jobs.json` is hand-written by this tooling — a conflict here almost always means someone edited the board from the UI at the same time; take both sides' new cards rather than dropping either) and push before retrying the merge. If CI is red, this is a `jobs.json`-only change from trusted tooling — don't debug application code for it; note the failure plainly in the Summary Stats output and leave the PR open rather than merging red.
+5. **Merge immediately** once clean and green — do not pause for confirmation, do not wait for a human reviewer, do not just report the PR link and stop. Use a standard merge (not squash/rebase, so the sync commit history stays intact) via `gh pr merge <number> --merge` or `mcp__github__merge_pull_request` with `merge_method: "merge"`.
+6. **Note the outcome** in the Summary Stats output: the PR number/link and that it was merged to `main`, or — if step 4 found a real blocker that isn't a simple conflict to resolve — what's blocking it and that it's still open for the user to look at.
+
+This is a lower bar than the general "driving a PR to green" rules elsewhere in this environment (which route ambiguous/large review feedback back to the user): a same-tool `jobs.json` board sync has no reviewer feedback to weigh, so there's nothing to defer. It's still worth staying alert for the one case that does need a human: if the diff against `main` ever contains anything beyond `dashboard/data/jobs.json` (e.g. this run also touched skill files, dashboard code, or anything else), stop and flag it in the output instead of auto-merging — the standing authorization here covers routine board-data syncs, not code changes.
 
 ## Phase 6: CV Tailoring
 
