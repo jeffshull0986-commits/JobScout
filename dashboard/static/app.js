@@ -105,6 +105,7 @@ function openModal(job) {
   document.getElementById("field-source").value = job?.source ?? "";
   document.getElementById("field-salary_range").value = job?.salary_range ?? "";
   document.getElementById("field-job_url").value = job?.job_url ?? "";
+  updateJobUrlOpenLink(job?.job_url ?? "");
   document.getElementById("field-score_reasoning").value = job?.score_reasoning ?? "";
   document.getElementById("field-research_notes").value = job?.research_notes ?? "";
   document.getElementById("field-networking_contacts").value = job?.networking_contacts ?? "";
@@ -135,6 +136,22 @@ function closeModal() {
   modalBackdrop.classList.add("hidden");
   jobForm.reset();
 }
+
+function updateJobUrlOpenLink(url) {
+  const link = document.getElementById("field-job_url-open");
+  const trimmed = (url ?? "").trim();
+  if (trimmed) {
+    link.href = trimmed;
+    link.removeAttribute("aria-disabled");
+  } else {
+    link.href = "#";
+    link.setAttribute("aria-disabled", "true");
+  }
+}
+
+document.getElementById("field-job_url").addEventListener("input", (e) => {
+  updateJobUrlOpenLink(e.target.value);
+});
 
 document.getElementById("add-job-btn").addEventListener("click", () => openModal(null));
 document.getElementById("modal-close").addEventListener("click", closeModal);
