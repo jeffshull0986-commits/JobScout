@@ -1,20 +1,24 @@
 :root {
-  --bg: #f4f5f7;
-  --panel: #ffffff;
-  --border: #dfe1e6;
-  --text: #172b4d;
-  --text-muted: #5e6c84;
-  --accent: #0052cc;
-  --accent-hover: #0747a6;
-  --danger: #de350b;
+  color-scheme: dark;
+  --bg: #16181d;
+  --panel: #1f2229;
+  --column-bg: #22252c;
+  --input-bg: #14161b;
+  --border: #33363f;
+  --text: #e6e8ec;
+  --text-muted: #9096a2;
+  --accent: #4c9aff;
+  --accent-hover: #2684ff;
+  --danger: #f87462;
+  --success: #4bce97;
   --radius: 8px;
-  --stage-review: #6b778c;
-  --stage-applied: #0052cc;
-  --stage-research_completed: #5243aa;
-  --stage-screening: #ff8b00;
-  --stage-interview: #00875a;
-  --stage-passed: #b3bac5;
-  --stage-skipped: #97a0af;
+  --stage-review: #8c9bab;
+  --stage-applied: #4c9aff;
+  --stage-research_completed: #9f8fef;
+  --stage-screening: #ffab4a;
+  --stage-interview: #4bce97;
+  --stage-passed: #626f86;
+  --stage-skipped: #7a869a;
 }
 
 * { box-sizing: border-box; }
@@ -56,7 +60,7 @@ body {
   max-width: 320px;
 }
 
-.sync-status.sync-ok { color: #006644; }
+.sync-status.sync-ok { color: var(--success); }
 .sync-status.sync-error { color: var(--danger); }
 
 .board {
@@ -70,7 +74,7 @@ body {
 
 .column {
   flex: 0 0 280px;
-  background: #ebecf0;
+  background: var(--column-bg);
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
@@ -89,7 +93,7 @@ body {
 }
 
 .column-count {
-  background: rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.08);
   border-radius: 12px;
   padding: 1px 8px;
   font-size: 12px;
@@ -105,7 +109,7 @@ body {
 }
 
 .column-body.drag-over {
-  background: #dfe6f5;
+  background: rgba(76,154,255,0.12);
 }
 
 .card {
@@ -113,7 +117,7 @@ body {
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 8px;
-  box-shadow: 0 1px 2px rgba(9,30,66,0.15);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
   cursor: grab;
   border-left: 4px solid var(--stage-color, var(--accent));
 }
@@ -143,26 +147,27 @@ body {
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 10px;
-  background: #eee;
+  background: rgba(255,255,255,0.08);
   color: var(--text-muted);
 }
 
 .badge-score {
-  background: #e3fcef;
-  color: #006644;
+  background: rgba(75,206,151,0.16);
+  color: var(--success);
   font-weight: 600;
 }
 
 .btn {
   border: 1px solid var(--border);
   background: var(--panel);
+  color: var(--text);
   border-radius: 4px;
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
 }
 
-.btn:hover { background: #f4f5f7; }
+.btn:hover { background: rgba(255,255,255,0.06); }
 
 .btn-primary {
   background: var(--accent);
@@ -178,12 +183,12 @@ body {
   background: transparent;
 }
 
-.btn-danger:hover { background: #fff0ec; }
+.btn-danger:hover { background: rgba(248,116,98,0.12); }
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(9,30,66,0.54);
+  background: rgba(0,0,0,0.6);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -228,11 +233,19 @@ body {
   width: 100%;
   margin-top: 4px;
   padding: 8px;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 14px;
   font-family: inherit;
   color: var(--text);
+}
+
+#job-form input:focus,
+#job-form select:focus,
+#job-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .field-row {
@@ -268,8 +281,8 @@ body {
 }
 
 .gmail-evidence {
-  background: #fffae6;
-  border: 1px solid #ffe380;
+  background: rgba(255,171,74,0.1);
+  border: 1px solid rgba(255,171,74,0.35);
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 12px;
