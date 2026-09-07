@@ -77,10 +77,51 @@ Service tier):
    `GIT_AUTHOR_EMAIL` if you don't want commits attributed to `Job Scout
    Board <jobscout-bot@users.noreply.github.com>`.
 4. Deploy. Render gives you a URL to load the board from.
+5. Nothing else is needed to keep it responsive — the self-ping described
+   below turns itself on from Render's own `RENDER_EXTERNAL_URL`.
 
-Free-tier instances spin down after 15 minutes of no traffic and take
-~30-60s to wake back up on the next request — expected for a personal
-dashboard you check once a day, not a problem to debug.
+### Keeping it awake (why it wouldn't open on a phone)
+
+Render's free tier spins a Web Service down after 15 minutes with no
+inbound traffic, and waking it takes ~30-60s. Mobile Safari and Chrome
+give up well before that and show a generic "can't open the page" error,
+which is what made the dashboard look broken from a phone while the same
+link opened fine from a Slack message — Slack's link preview fetches the
+URL server-side the moment you post it and absorbs the wake-up, so by the
+time you tap it the service is already warm. Nothing was wrong with the
+phone, the browser, or the password; they were just the ones paying the
+cold-start cost.
+
+Two things keep that from happening:
+
+1. **The app pings itself.** On startup the server begins requesting its
+   own public URL every 10 minutes (`start_keepalive()` in `server.py`),
+   which counts as inbound traffic and stops Render idling it out. This
+   switches on automatically on Render, which sets `RENDER_EXTERNAL_URL`
+   for you — no configuration needed. Override the target with
+   `KEEPALIVE_URL`, change the cadence with `KEEPALIVE_INTERVAL_SECONDS`,
+   or set that to `0` to turn it off. It stays off locally, where neither
+   var is set.
+2. **A GitHub Actions backstop** (`.github/workflows/keep-alive.yml`) that
+   can wake the service if it *has* gone to sleep — something a ping from
+   inside a sleeping container can't do. It is only a backstop: GitHub's
+   cron scheduler is best-effort and was measured firing this workflow
+   every 100-300 minutes rather than the requested 10, which is why it
+   can't be the only mechanism. It does a single ping per run and exits,
+   because this repo is private and Actions minutes are metered (2,000/mo
+   on the Free plan, billed at a one-minute minimum per job).
+
+The server also binds its port *before* running its git setup, so none of
+that setup (including a `git fetch` that can take seconds) is added to a
+cold start, and serves `/healthz` outside the login gate so a ping or an
+uptime monitor gets a clean `200` instead of a `401` it would read as an
+outage.
+
+**Cost note:** staying up around the clock uses roughly 730 of Render's
+750 free instance-hours per month — essentially the whole free allowance
+for a single service. If you'd rather not spend it that way, set
+`KEEPALIVE_INTERVAL_SECONDS=0` and accept the cold starts, or move to
+Render's paid Starter tier, which doesn't spin down at all.
 
 ### Password-protecting a hosted deployment
 
@@ -91,7 +132,14 @@ API — requires an HTTP Basic Auth login before it responds; the browser
 will prompt for it. Optionally set `DASHBOARD_USER` too (defaults to
 `admin`). Leave `DASHBOARD_PASSWORD` unset (the default locally) and the
 app stays open, exactly as before — this is opt-in so local runs never
-need a password.
+need a password. `/healthz` is the one route outside the gate; it returns
+a bare `ok` and exposes nothing about the board.
+
+Worth knowing: this password protects the *hosted dashboard*, not the
+data. `dashboard/data/jobs.json` is committed to the repo, so anyone who
+can read the repo can read that file — companies, salary ranges,
+application status, research and contact notes. The repo is private for
+this reason; keep it that way, and be careful about adding collaborators.
 
 ## CLI (used by the routine, but you can run these too)
 

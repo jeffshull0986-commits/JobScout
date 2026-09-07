@@ -27,6 +27,9 @@ import re
 import subprocess
 import sys
 import threading
+import time
+import urllib.error
+import urllib.request
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -66,6 +69,12 @@ STAGE_DATE_FIELD = {
 }
 
 _lock = threading.Lock()
+
+# Set once the startup git bootstrap (identity/auth/branch) has finished.
+# The bootstrap does real network I/O, so on a hosted deployment it runs on
+# a background thread *after* the port is already listening (see main()) -
+# anything that actually needs git waits on this first.
+_git_ready = threading.Event()
 
 
 def load_data():
@@ -251,6 +260,76 @@ def ensure_on_branch():
     _run_git("checkout", "-B", branch, f"origin/{branch}")
 
 
+def run_git_bootstrap():
+    """Run the three startup git steps, then flag git as ready.
+
+    Kept as one callable so main() can run it inline for CLI commands (which
+    need git configured before they do anything) but hand it to a background
+    thread for the server, where blocking the port on it is what makes a
+    cold start feel broken. Never raises - each step already swallows its
+    own failures, and a half-configured git surfaces as a clear error at
+    sync time rather than as a server that refuses to start.
+    """
+    try:
+        bootstrap_git_identity()
+        bootstrap_git_auth()
+        ensure_on_branch()
+    finally:
+        _git_ready.set()
+
+
+def start_keepalive():
+    """Ping our own public URL on a timer so the host never idles us out.
+
+    Render's free tier spins a Web Service down after 15 minutes with no
+    *inbound* traffic, and waking it costs ~30-60s on the next request. A
+    request the app sends to its own public hostname leaves the container,
+    hits Render's router, and arrives back as genuine inbound traffic - so
+    this keeps the service warm without depending on anything outside it.
+
+    That matters because the external pinger this replaces (a GitHub
+    Actions cron) is not dependable: GitHub's scheduler is explicitly
+    best-effort and throttles low-priority schedules hard, so a `*/10`
+    cron was observed firing only every 100-300 minutes - many times
+    longer than the 15-minute idle window it was meant to stay under. The
+    workflow is still useful as a backstop (it can wake a service that has
+    already gone to sleep, which a ping from inside a sleeping container
+    obviously cannot), but it can't be the primary mechanism.
+
+    Render sets RENDER_EXTERNAL_URL automatically, so this switches itself
+    on when deployed there and stays off everywhere else - a local run has
+    neither that var nor any reason to self-ping. Set KEEPALIVE_URL to
+    point it somewhere else, or KEEPALIVE_INTERVAL_SECONDS=0 to disable it
+    (worth knowing: staying up 24/7 uses ~730 of Render's 750 free
+    instance-hours per month, so this is close to the whole free
+    allowance for one service).
+    """
+    base = (os.environ.get("KEEPALIVE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
+    try:
+        interval = int(os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "600"))
+    except ValueError:
+        interval = 600
+    if not base or interval <= 0:
+        return None
+
+    # /healthz rather than / so the ping needs no credentials and reads as a
+    # real success to any uptime monitor pointed at the same path.
+    url = base.rstrip("/") + "/healthz"
+
+    def loop():
+        while True:
+            time.sleep(interval)
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    response.read()
+            except (urllib.error.URLError, OSError, ValueError):
+                pass  # transient - the next tick tries again
+
+    thread = threading.Thread(target=loop, name="keepalive", daemon=True)
+    thread.start()
+    return url
+
+
 def sync_with_remote():
     """Commit any local changes, then pull, then push.
 
@@ -272,6 +351,20 @@ def sync_with_remote():
     Returns a dict describing what happened - never raises.
     """
     log = []
+
+    # The server binds its port before the git bootstrap has run (see
+    # main()), so a Sync clicked in the first seconds after a cold start
+    # could otherwise race it and fail against an unconfigured remote.
+    # Bootstrap normally finishes in well under a second; the wait is only
+    # ever visible if git is genuinely wedged.
+    if not _git_ready.wait(timeout=60):
+        return {
+            "ok": False,
+            "step": "bootstrap",
+            "message": "Git setup is still running (the server just started). "
+                       "Wait a few seconds and hit Sync again.",
+            "log": log,
+        }
 
     code, out, err = _run_git("rev-parse", "--abbrev-ref", "HEAD")
     if code != 0 or not out or out == "HEAD":
@@ -357,6 +450,10 @@ def git_debug_info():
         "git_user_name": run("config", "--get", "user.name"),
         "github_token_env_set": bool(token),
         "git_branch_env": os.environ.get("GIT_BRANCH"),
+        "git_bootstrap_finished": _git_ready.is_set(),
+        "keepalive_url": (os.environ.get("KEEPALIVE_URL")
+                          or os.environ.get("RENDER_EXTERNAL_URL")),
+        "keepalive_interval_seconds": os.environ.get("KEEPALIVE_INTERVAL_SECONDS", "600"),
     }
 
 
@@ -424,7 +521,37 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_health(self, with_body=True):
+        """Answer /healthz with a bare 200. Deliberately outside the auth
+        gate: the keepalive pinger and any external uptime monitor need a
+        response that means "up", and a 401 does not - monitors report it
+        as an outage and some stop pinging a URL they believe is down,
+        which would defeat the entire point of pinging it. Nothing about
+        the board is exposed here, just the two bytes below.
+        """
+        body = b"ok"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if with_body:
+            self.wfile.write(body)
+
+    def do_HEAD(self):
+        # Some uptime monitors probe with HEAD; without this they'd get a
+        # 501 from BaseHTTPRequestHandler and flag the service as down.
+        if urlparse(self.path).path == "/healthz":
+            self._send_health(with_body=False)
+            return
+        self.send_response(405)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):
+        if urlparse(self.path).path == "/healthz":
+            self._send_health()
+            return
         if not self._authenticated():
             self._send_auth_challenge()
             return
@@ -646,18 +773,32 @@ CLI_COMMANDS = {
 
 
 def main():
-    bootstrap_git_identity()
-    bootstrap_git_auth()
-    ensure_on_branch()
-
     args = sys.argv[1:]
     if args and args[0] in CLI_COMMANDS:
+        # CLI commands touch the repo directly, so git has to be ready
+        # before they run - no reason to defer it here.
+        run_git_bootstrap()
         CLI_COMMANDS[args[0]](args[1:])
         return
 
     port = int(args[0]) if args else int(os.environ.get("PORT", 8420))
+
+    # Bind and start listening *before* the git bootstrap, not after. A host
+    # like Render holds the visitor's request while the container wakes and
+    # only routes it once the port is open, so every second spent here is a
+    # second added to an already slow (~30-60s) cold start. The old order
+    # put ensure_on_branch()'s `git fetch` - a network round trip with a 30s
+    # timeout - directly in that path, which is long enough that a phone
+    # browser gives up and shows an error page. Anything that needs git
+    # waits on _git_ready instead.
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=run_git_bootstrap, name="git-bootstrap", daemon=True).start()
+
+    keepalive_url = start_keepalive()
+
     print(f"Job Scout dashboard running at http://0.0.0.0:{port}")
+    if keepalive_url:
+        print(f"Self-ping keepalive enabled against {keepalive_url}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
