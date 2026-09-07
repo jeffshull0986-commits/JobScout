@@ -10,12 +10,14 @@ name: Keep Job Scout dashboard awake
 # can't ping anything to wake itself.
 #
 # It deliberately does ONE ping per run and exits, rather than staying alive
-# and pinging on a timer. This repo is private, so Actions minutes are
-# metered (2,000/month on the Free plan) and GitHub bills a minimum of one
-# minute per job. One short run per trigger costs ~1 minute; at the ~15-25
-# runs a day GitHub actually delivers, that's a few hundred minutes a month,
-# comfortably inside the allowance. A long-running pinger would consume tens
-# of thousands of minutes and exhaust the quota in about a day and a half.
+# and pinging on a timer. Actions minutes are unlimited on public repos but
+# metered on private ones (2,000/month on the Free plan, billed at a
+# one-minute minimum per job), so this is sized to stay well inside that
+# allowance either way: one short run per trigger costs ~1 minute, and at
+# the ~15-25 runs a day GitHub actually delivers that is a few hundred
+# minutes a month. A long-running pinger would instead consume tens of
+# thousands of minutes and exhaust a private repo's quota in about a day
+# and a half.
 #
 # Note the schedule below is aspirational: GitHub's cron scheduler is
 # explicitly best-effort and throttles low-priority schedules hard. This

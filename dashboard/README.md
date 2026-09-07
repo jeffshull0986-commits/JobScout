@@ -108,8 +108,9 @@ Two things keep that from happening:
    cron scheduler is best-effort and was measured firing this workflow
    every 100-300 minutes rather than the requested 10, which is why it
    can't be the only mechanism. It does a single ping per run and exits,
-   because this repo is private and Actions minutes are metered (2,000/mo
-   on the Free plan, billed at a one-minute minimum per job).
+   which keeps it affordable if the repo is private — Actions minutes are
+   unlimited on public repos but metered on private ones (2,000/mo on the
+   Free plan, billed at a one-minute minimum per job).
 
 The server also binds its port *before* running its git setup, so none of
 that setup (including a `git fetch` that can take seconds) is added to a
@@ -138,8 +139,8 @@ a bare `ok` and exposes nothing about the board.
 Worth knowing: this password protects the *hosted dashboard*, not the
 data. `dashboard/data/jobs.json` is committed to the repo, so anyone who
 can read the repo can read that file — companies, salary ranges,
-application status, research and contact notes. The repo is private for
-this reason; keep it that way, and be careful about adding collaborators.
+application status, research and contact notes. Keep the repo private for
+that reason, and be careful about who you add as a collaborator.
 
 ## CLI (used by the routine, but you can run these too)
 
