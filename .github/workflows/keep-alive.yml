@@ -1,28 +1,67 @@
 name: Keep Job Scout dashboard awake
 
 # Render's free tier spins a Web Service down after 15 minutes with no
-# inbound traffic. This just pings the dashboard on a schedule so it never
-# goes idle long enough to sleep, and stays instantly loadable from your
-# phone. Any response (even a 401 if DASHBOARD_PASSWORD is set) counts as
-# traffic - we don't need to authenticate, just to knock on the door.
+# inbound traffic, and waking it costs ~30-60s on the next request - long
+# enough that a phone browser gives up and shows an error page.
 #
-# Note: GitHub's cron scheduler is best-effort and can drift by several
-# minutes on low-activity repos, so this runs every 10 minutes to leave
-# margin under Render's 15-minute idle window.
+# The PRIMARY defence against that now lives in the app itself: server.py
+# self-pings its own public URL every 10 minutes (see start_keepalive), so
+# it never goes idle in the first place. This workflow is the backstop for
+# the one case a self-ping can't cover - a service that is *already* asleep
+# or was restarted by a deploy, since a sleeping container can't ping
+# anything.
+#
+# Why it can't be the primary mechanism: GitHub's cron scheduler is
+# explicitly best-effort and throttles low-priority schedules hard. This
+# workflow's previous `*/10` schedule (every 10 minutes) was measured
+# actually firing every 100-300 minutes - many times longer than the
+# 15-minute idle window it was supposed to stay under, which is why the
+# dashboard kept being asleep despite "having a keep-alive".
+#
+# So rather than trusting the schedule to fire often, each run *stays
+# alive* and pings on its own timer for up to ~5h45m (GitHub's per-job
+# ceiling is 6h). Whenever the scheduler does get around to firing,
+# concurrency below cancels the previous long-runner and starts a fresh
+# one. Actions minutes are free on public repos, so this costs nothing.
 
 on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+permissions: {}
+
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
-      - name: Ping dashboard
+      - name: Ping dashboard on a timer
+        env:
+          # /healthz is deliberately outside the app's Basic Auth gate, so
+          # this is a real 200 rather than the 401 the old root-path ping
+          # got. Any response woke the service either way, but a 200 means
+          # the check below can actually tell "awake" from "broken".
+          URL: https://jobscout-qq64.onrender.com/healthz
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 "https://jobscout-qq64.onrender.com/" || echo "curl_failed")
-          echo "Response: $code"
-          if [ "$code" = "curl_failed" ]; then
-            echo "::warning::Could not reach the dashboard at all (network/DNS failure) - Render deploy may be down, not just asleep."
-          fi
+          deadline=$(( SECONDS + 5*3600 + 45*60 ))
+          failures=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 90 "$URL" || echo "000")
+            if [ "$code" = "200" ]; then
+              failures=0
+            else
+              failures=$(( failures + 1 ))
+              echo "::warning::Ping got HTTP $code (consecutive failures: $failures)"
+              if [ "$failures" -ge 3 ]; then
+                echo "::error::Dashboard unreachable on 3 consecutive pings - the Render deploy is probably down, not just asleep."
+                exit 1
+              fi
+            fi
+            sleep 300
+          done
+          echo "Reached the run's time budget; the next scheduled run takes over."
