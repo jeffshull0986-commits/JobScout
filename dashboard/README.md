@@ -104,10 +104,12 @@ Two things keep that from happening:
    var is set.
 2. **A GitHub Actions backstop** (`.github/workflows/keep-alive.yml`) that
    can wake the service if it *has* gone to sleep — something a ping from
-   inside a sleeping container can't do. Note this is only a backstop:
-   GitHub's cron scheduler is best-effort and was measured firing this
-   workflow every 100-300 minutes rather than the requested 10, which is
-   why it can't be the only mechanism.
+   inside a sleeping container can't do. It is only a backstop: GitHub's
+   cron scheduler is best-effort and was measured firing this workflow
+   every 100-300 minutes rather than the requested 10, which is why it
+   can't be the only mechanism. It does a single ping per run and exits,
+   because this repo is private and Actions minutes are metered (2,000/mo
+   on the Free plan, billed at a one-minute minimum per job).
 
 The server also binds its port *before* running its git setup, so none of
 that setup (including a `git fetch` that can take seconds) is added to a
@@ -134,10 +136,10 @@ need a password. `/healthz` is the one route outside the gate; it returns
 a bare `ok` and exposes nothing about the board.
 
 Worth knowing: this password protects the *hosted dashboard*, not the
-data. `dashboard/data/jobs.json` is committed to the repo, so if the repo
-is public that file — companies, salary ranges, application status,
-research and contact notes — is readable by anyone on GitHub. Make the
-repo private if that matters to you.
+data. `dashboard/data/jobs.json` is committed to the repo, so anyone who
+can read the repo can read that file — companies, salary ranges,
+application status, research and contact notes. The repo is private for
+this reason; keep it that way, and be careful about adding collaborators.
 
 ## CLI (used by the routine, but you can run these too)
 
