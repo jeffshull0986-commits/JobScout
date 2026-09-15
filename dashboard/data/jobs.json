@@ -1,5 +1,5 @@
 {
-  "next_id": 76,
+  "next_id": 77,
   "jobs": [
     {
       "id": 1,
@@ -1599,17 +1599,19 @@
       "source": "Google",
       "job_url": "https://job-boards.greenhouse.io/gusto/jobs/8180433",
       "salary_range": "$131,430-$161,000 (SF/NY); lower in Denver/Scottsdale",
-      "stage": "review",
+      "stage": "research_completed",
       "date_added": "2026-09-14",
-      "date_applied": null,
-      "date_research_completed": null,
+      "date_applied": "2026-09-15",
+      "date_research_completed": "2026-09-15",
       "date_screening": null,
       "date_interview": null,
       "date_passed": null,
       "notes": "",
-      "research_notes": "",
-      "networking_contacts": "",
-      "gmail_evidence": []
+      "research_notes": "Gusto is a payroll/HR/benefits SaaS platform for small businesses, now serving 500,000+ businesses with $1B+ trailing revenue (as of May 2026) and a $9.3B valuation -- cash-flow positive with 5 straight quarters of accelerating growth, widely seen as an IPO candidate though a 2026 debut looks unlikely given market conditions. Recent strategic focus includes deepening the integrated payroll+HR+benefits platform and international expansion via an EOR partnership with Remote. No gaming/esports/sports/AI industry tie -- this is a fintech/HR-SaaS company, outside Jeff's preferred verticals, though the paid social role itself is a strong skills match. Interview prep: lean into Jeff's Meta/Google Ads budget-scaling and CPA-reduction experience at Repeat, and be ready to speak to why an HR-SaaS company appeals despite the industry mismatch (e.g., stability, scale, comp).\n",
+      "networking_contacts": "Rachael Powell \u2014 VP, Head of Brand and Integrated Marketing \u2014 linkedin.com/in/rachaelcpowell/\nFara Howard \u2014 Chief Marketing Officer, General Manager \u2014 linkedin.com/in/fara-howard/\nSarah Smithline \u2014 Marketing VP, B2B SaaS \u2014 linkedin.com/in/sarahsmithline/\nNikki Jackson \u2014 VP of Marketing / Growth Strategist \u2014 linkedin.com/in/nicoletteljackson/\n",
+      "gmail_evidence": [
+        "Gmail: Thanks for applying to Gusto, Jeff from careers@gusto.com, 2026-09-14"
+      ]
     },
     {
       "id": 74,
@@ -1645,6 +1647,28 @@
       "salary_range": "$190,000-$225,000 + equity",
       "stage": "skipped",
       "date_added": "2026-09-14",
+      "date_applied": null,
+      "date_research_completed": null,
+      "date_screening": null,
+      "date_interview": null,
+      "date_passed": null,
+      "notes": "",
+      "research_notes": "",
+      "networking_contacts": "",
+      "gmail_evidence": []
+    },
+    {
+      "id": 76,
+      "title": "Growth Marketer",
+      "company": "Tavus",
+      "location": "San Francisco Bay Area",
+      "fit_score": 8,
+      "score_reasoning": "Conversational/video AI company - exact domain match. Growth marketer role builds acquisition/activation/retention experiments, mirrors paid-media scaling background. -1: role title is IC-level growth marketer not manager. -1: skills lean B2B SaaS/developer-tools growth rather than consumer gaming, partial overlap only.",
+      "source": "LinkedIn",
+      "job_url": "https://www.linkedin.com/jobs/view/4465779875/",
+      "salary_range": "$160,000 - $250,000",
+      "stage": "review",
+      "date_added": "2026-09-15",
       "date_applied": null,
       "date_research_completed": null,
       "date_screening": null,
