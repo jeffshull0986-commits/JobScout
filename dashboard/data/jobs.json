@@ -1,5 +1,5 @@
 {
-  "next_id": 224,
+  "next_id": 225,
   "jobs": [
     {
       "id": 3,
@@ -1763,6 +1763,28 @@
       "salary_range": "$124,000-$178,000",
       "stage": "review",
       "date_added": "2026-10-27",
+      "date_applied": null,
+      "date_research_completed": null,
+      "date_screening": null,
+      "date_interview": null,
+      "date_passed": null,
+      "notes": "",
+      "research_notes": "",
+      "networking_contacts": "",
+      "gmail_evidence": []
+    },
+    {
+      "id": 224,
+      "title": "Marketing Operations & Analytics Manager, AI Simulation",
+      "company": "SandboxAQ",
+      "location": "United States (remote not explicitly confirmed)",
+      "fit_score": 6,
+      "score_reasoning": "Exact marketing ops title, greenfield martech/attribution/reporting ownership, AI company; gaps: Salesforce/Marketo-heavy B2B deep-tech, growth-stage not established, remote unconfirmed.",
+      "source": "LinkedIn",
+      "job_url": "https://www.linkedin.com/jobs/view/4465226998",
+      "salary_range": "$121.6K - $228K",
+      "stage": "review",
+      "date_added": "2026-10-28",
       "date_applied": null,
       "date_research_completed": null,
       "date_screening": null,
